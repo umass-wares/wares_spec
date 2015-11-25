@@ -273,6 +273,8 @@ if __name__ == '__main__':
     print ogpC_m
     print ogpD_m
 
+    np.save('ogp_update_zdok0.npz', zdok0_ogp = multi_ogp)
+
     #adc_cal.set_ogp(zdok, cores, multi_ogp)
 
 	
