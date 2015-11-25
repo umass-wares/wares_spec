@@ -29,16 +29,16 @@ katcp_port = 7147
 intnum = 1
 
 class FPGA(object):
-    def __init__(self, roach, katcp_port=7147,
+    def __init__(self, roach_id, katcp_port=7147,
                  bitstream = bitstream,
                  skip = True,
                  acc_len = 2*(2**28)/2048,
-                 gain = 0xffffffff,
+                 gain = 0xff,
                  shift = 0xaaa,
                  numchannels = 2048,
                  bandwidth = 400.0
                  ):
-        self.roach = roach
+        self.roach = roach_id
         self.katcp_port = katcp_port
         self.bitstream = bitstream
         self.skip = skip
@@ -140,25 +140,40 @@ class FPGA(object):
         t1 = time.time()
         acc_n = self.get_acc_n()
         
-        a_0 = numpy.array(struct.unpack('>%dl' % (self.numchannels/2), 
-                                        self.fpga.read('even',
-                                                       self.numchannels*4/2, 0)
+        a_0 = numpy.array(struct.unpack('>%dl' % (self.numchannels/4.), 
+                                        self.fpga.read('bram0',
+                                                       self.numchannels, 0)
                                         ),
                           dtype='float')
-        a_1 = numpy.array(struct.unpack('>%dl' % (self.numchannels/2), 
-                                        self.fpga.read('odd', 
-                                                       self.numchannels*4/2, 0)
+
+        a_1 = numpy.array(struct.unpack('>%dl' % (self.numchannels/4.), 
+                                        self.fpga.read('bram1', 
+                                                       self.numchannels, 0)
                                         ),
                           dtype='float')
-        
+
+        a_2 = numpy.array(struct.unpack('>%dl' % (self.numchannels/4.),
+                                        self.fpga.read('bram2',
+                                                       self.numchannels, 0)
+                                        ),
+                          dtype='float')
+
+        a_3 = numpy.array(struct.unpack('>%dl' % (self.numchannels/4.),
+                                        self.fpga.read('bram3',
+                                                       self.numchannels, 0)
+                                        ),
+                          dtype='float')
+      
         interleave_a = numpy.empty((self.numchannels,), dtype=float)
         
         #interleave_a = []
         #for i in range(1024):
         #    interleave_a.append(a_0[i])
         #    interleave_a.append(a_1[i])
-        interleave_a[0::2] = a_0
-        interleave_a[1::2] = a_1
+        interleave_a[0::4] = a_0
+        interleave_a[1::4] = a_1
+        interleave_a[2::4] = a_2
+        interleave_a[3::4] = a_3
 
         print "acc_n = %d; Got data in %s secs" % (acc_n, time.time() - t1)
         #return acc_n, numpy.array(interleave_a, dtype=float)
