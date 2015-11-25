@@ -268,12 +268,12 @@ if __name__ == '__main__':
     multi_ogp = (ogpA_m,ogpB_m,ogpC_m,ogpD_m)
     cores = [1,2,3,4]
 
-    print ogpA_m
-    print ogpB_m
-    print ogpC_m
-    print ogpD_m
+    #print ogpA_m
+    #print ogpB_m
+    #print ogpC_m
+    #print ogpD_m
 
-    np.save('ogp_update_zdok0.npz', zdok0_ogp = multi_ogp)
+    np.save('ogp_default.npz', zdok0_ogp = multi_ogp)
 
     #adc_cal.set_ogp(zdok, cores, multi_ogp)
 
