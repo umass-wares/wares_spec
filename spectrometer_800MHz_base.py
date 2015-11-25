@@ -36,7 +36,7 @@ class FPGA(object):
                  gain = 0xff,
                  shift = 0xaaa,
                  numchannels = 2048,
-                 bandwidth = 400.0
+                 bandwidth = 800.0
                  ):
         self.roach = roach_id
         self.katcp_port = katcp_port
@@ -140,6 +140,10 @@ class FPGA(object):
         t1 = time.time()
         acc_n = self.get_acc_n()
         
+        #
+        # Retrieves data from bram0-bram3 registers
+        # Interleaves into full spectrum
+        #
         a_0 = numpy.array(struct.unpack('>%dl' % (self.numchannels/4.), 
                                         self.fpga.read('bram0',
                                                        self.numchannels, 0)
@@ -166,10 +170,6 @@ class FPGA(object):
       
         interleave_a = numpy.empty((self.numchannels,), dtype=float)
         
-        #interleave_a = []
-        #for i in range(1024):
-        #    interleave_a.append(a_0[i])
-        #    interleave_a.append(a_1[i])
         interleave_a[0::4] = a_0
         interleave_a[1::4] = a_1
         interleave_a[2::4] = a_2
