@@ -32,7 +32,7 @@ class FPGA(object):
     def __init__(self, roach_id, katcp_port=7147,
                  bitstream = bitstream,
                  skip = True,
-                 acc_len = 2*(2**28)/2048,
+                 acc_len = int(0.1*(2**28)/1024),
                  gain = 0xff,
                  shift = 0xaaa,
                  numchannels = 2048,
