@@ -23,7 +23,7 @@ import matplotlib.animation as animation
 import sys
 from scheduler import Task, Scheduler
 
-bitstream = 'r_spec_1600mhz_r112_asiaa_adc_2015_Nov_24_1220.bof.gz'
+bitstream = 'r_spec_1600mhz_r112_asiaa_adc_2015_Nov_25_1417.bof.gz'
 katcp_port = 7147
 
 intnum = 1
@@ -145,25 +145,25 @@ class FPGA(object):
         # Interleaves into full spectrum
         #
         a_0 = numpy.array(struct.unpack('>%dl' % (self.numchannels/4.), 
-                                        self.fpga.read('bram0',
+                                        self.fpga.read('bram00',
                                                        self.numchannels, 0)
                                         ),
                           dtype='float')
 
         a_1 = numpy.array(struct.unpack('>%dl' % (self.numchannels/4.), 
-                                        self.fpga.read('bram1', 
+                                        self.fpga.read('bram01', 
                                                        self.numchannels, 0)
                                         ),
                           dtype='float')
 
         a_2 = numpy.array(struct.unpack('>%dl' % (self.numchannels/4.),
-                                        self.fpga.read('bram2',
+                                        self.fpga.read('bram02',
                                                        self.numchannels, 0)
                                         ),
                           dtype='float')
 
         a_3 = numpy.array(struct.unpack('>%dl' % (self.numchannels/4.),
-                                        self.fpga.read('bram3',
+                                        self.fpga.read('bram03',
                                                        self.numchannels, 0)
                                         ),
                           dtype='float')
@@ -178,6 +178,53 @@ class FPGA(object):
         print "acc_n = %d; Got data in %s secs" % (acc_n, time.time() - t1)
         #return acc_n, numpy.array(interleave_a, dtype=float)
         return acc_n, interleave_a
+
+    def get_data_normalize(self, sleep):
+
+        self.reset()
+        time.sleep(sleep)
+
+        t1 = time.time()
+        acc_n = self.get_acc_n()
+        
+        #
+        # Retrieves data from bram0-bram3 registers
+        # Interleaves into full spectrum
+        #
+        a_0 = numpy.array(struct.unpack('>%dl' % (self.numchannels/4.), 
+                                        self.fpga.read('bram00',
+                                                       self.numchannels, 0)
+                                        ),
+                          dtype='float')
+
+        a_1 = numpy.array(struct.unpack('>%dl' % (self.numchannels/4.), 
+                                        self.fpga.read('bram01', 
+                                                       self.numchannels, 0)
+                                        ),
+                          dtype='float')
+
+        a_2 = numpy.array(struct.unpack('>%dl' % (self.numchannels/4.),
+                                        self.fpga.read('bram02',
+                                                       self.numchannels, 0)
+                                        ),
+                          dtype='float')
+
+        a_3 = numpy.array(struct.unpack('>%dl' % (self.numchannels/4.),
+                                        self.fpga.read('bram03',
+                                                       self.numchannels, 0)
+                                        ),
+                          dtype='float')
+      
+        interleave_a = numpy.empty((self.numchannels,), dtype=float)
+        
+        interleave_a[0::4] = a_0
+        interleave_a[1::4] = a_1
+        interleave_a[2::4] = a_2
+        interleave_a[3::4] = a_3
+
+        print "acc_n = %d; Got data in %s secs" % (acc_n, time.time() - t1)
+        #return acc_n, numpy.array(interleave_a, dtype=float)
+        return acc_n, interleave_a/float(acc_n)
 
     
     def get_data_old(self):
@@ -225,7 +272,7 @@ class FPGA(object):
         self.dumptime = dumptime
         self.required_integ_time = integtime
         self.integtime = 0.0
-        self.acc_len = int(1.5*dumptime*(2**28)/2048) #make sure that dumptime is longer than read interval
+        self.acc_len = int(1.5*dumptime*(2**28)/1024) #make sure that dumptime is longer than read interval
         self.data = numpy.zeros(2048, dtype='float')
         self.accum_count = 0
         self.prev_acc_n = 0
