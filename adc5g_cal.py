@@ -18,16 +18,23 @@ def syn_func_nonlin( x, off, a1, p1):
 def fitsin(p, sin, cos):
 	return p[0] + p[1]*sin + p[2]*cos
 
+def sin_residuals(p, sin, cos, raw):
+        res = raw - fitsin(p, sin, cos)
+        for i in range(raw.size):
+            if raw[i] == -128 or raw[i] == 127:
+                res[i] = 0
+        return res
+
 
 class ADC5g_Calibration_Tools (object):
     
     def __init__(self, roach, clk):
 
         self.roach = roach
-        #self.program = program
+        self.bitstream = 'adc5g_tim_aleks_test_2015_Oct_14_1208.bof.gz'
         self.clk = clk
 
-    def sin_residuals(self, p, sin, cos, raw):
+    def sin_residuals(p, sin, cos, raw):
 
         res = raw - fitsin(p, sin, cos)
 	for i in range(raw.size):
@@ -163,7 +170,7 @@ class ADC5g_Calibration_Tools (object):
 
         return multiple_ogp
 
-    def set_ogp(self, zdok, cores, multiple_ogp):
+    def set_ogp(self, multiple_ogp, zdok, cores=[1,2,3,4]):
 
         adc5g.set_spi_control(self.roach, zdok)
         
@@ -179,10 +186,127 @@ class ADC5g_Calibration_Tools (object):
 
             phase_spi = math.floor(.5 + phase*255/28.) + 0x80
             adc5g.set_spi_phase(self.roach, zdok, core, float(phase)*0.65)
-	##
 
+	self.roach.progdev(self.bitstream)
+
+    def do_ogp_sweep(self, freqs, zdoks=[0], save=False, fname='ogp_default.npz'):
+
+        freqs = np.arange(6)*50 + 100.0
+	syn = HP8780A()
+
+	zdok = 0
+
+	ogpA = {}
+	ogpB = {}
+	ogpC = {}
+	ogpD = {}
+
+	for freq in freqs: # MHz
+
+		syn.set_freq(freq*1e6)
+		time.sleep(2.0)
+	
+		rawAB = adc5g.get_snapshot(self.roach, 'scope_raw_a%i_snap' %(zdok))
+		rawCD = adc5g.get_snapshot(self.roach, 'scope_raw_c%i_snap' %(zdok))
+
+		paramsA, paramsB = self.fit_snap(freq, rawAB)
+		paramsC, paramsD = self.fit_snap(freq, rawCD)
+
+		ogpA[freq], ogpB[freq] = self.convert_fit_to_ogp(freq, 
+								 paramsA, paramsB)
+		ogpC[freq], ogpD[freq] = self.convert_fit_to_ogp(freq, 
+								 paramsC, paramsD)
+
+	ogpA_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpA.values())))
+        ogpB_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpB.values())))
+        ogpC_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpC.values())))
+        ogpD_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpD.values())))
+
+        multi_ogp = (ogpA_m,ogpB_m,ogpC_m,ogpD_m)
+
+	if save:
+		np.savez(fname, zdok0_ogp = multi_ogp)
+
+	return multi_ogp
+
+    def do_ogp_noise_source(self, rpt, save=False, fname='ogp_noise_default.npz'):
+
+        ogpA = {}
+	ogpB = {}
+	ogpC = {}
+	ogpD = {}
+
+        for i in range(rpt):
+
+		rawAB = adc5g.get_snapshot(self.roach, 'scope_raw_a0_snap') 
+		rawCD = adc5g.get_snapshot(self.roach, 'scope_raw_c0_snap')
+
+		ogpA[i], ogpB[i] = self.convert_noise_to_ogp(rawAB)
+		ogpC[i], ogpD[i] = self.convert_noise_to_ogp(rawCD)
+
+	ogpA_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpA.values())))
+        ogpB_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpB.values())))
+        ogpC_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpC.values())))
+        ogpD_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpD.values())))
+
+        multi_ogp = (ogpA_m,ogpB_m,ogpC_m,ogpD_m)
+
+        if save:
+                np.savez(fname, zdok0_ogp = multi_ogp)
+
+        return multi_ogp
+	
+		
+    def convert_noise_to_ogp(self, raw):
+
+        N = float(len(raw))
+
+        raw_off = np.sum(raw)/N
 	    
-    def plot_fit(self, freq, raw, pts=100):
+	raw_amp = np.sum(abs(raw-raw_off))/N
+
+	multiple_ogp = []
+
+	for i in range(0,2):
+
+		core = raw[i::2]
+		n = float(len(core))
+
+		off = (np.sum(core)/n)*(-500.0/256.0)
+		amp = np.sum(abs(core-off))/n
+		rel_amp = 100.0*(raw_amp-amp)/raw_amp
+		    
+		ogp_core = (off, rel_amp, 0)
+		multiple_ogp.append(ogp_core)
+
+	return multiple_ogp
+
+
+    def update_ogp(self, fname='ogp_default.npz'):
+
+        zdok = 0
+
+	df = np.load(fname)
+	zdok0_ogp = df['zdok0_ogp']
+
+	print
+	print "Setting ogp for zdok0..."
+	print zdok0_ogp
+	print
+	
+	self.set_ogp(multiple_ogp = zdok0_ogp, zdok = zdok)
+
+    def clear_ogp(self):
+
+	for core in range(1,5):
+
+              adc5g.set_spi_offset(self.roach, 0, core, 0)
+              adc5g.set_spi_gain(self.roach, 0, core, 0)
+	      adc5g.set_spi_phase(self.roach, 0, core, 0)
+
+	self.roach.progdev(self.bitsream)
+	    
+    def plot_fit(self, freq, raw, pts=50):
 	
 	params1,params2 = self.fit_snap(freq, raw)
 
@@ -266,14 +390,13 @@ if __name__ == '__main__':
     ogpD_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpD.values())))
 
     multi_ogp = (ogpA_m,ogpB_m,ogpC_m,ogpD_m)
-    cores = [1,2,3,4]
 
     #print ogpA_m
     #print ogpB_m
     #print ogpC_m
     #print ogpD_m
 
-    np.save('ogp_default.npz', zdok0_ogp = multi_ogp)
+    np.savez('ogp_default.npz', zdok0_ogp = multi_ogp)
 
     #adc_cal.set_ogp(zdok, cores, multi_ogp)
 
