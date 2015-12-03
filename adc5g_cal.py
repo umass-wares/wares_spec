@@ -294,7 +294,7 @@ class ADC5g_Calibration_Tools (object):
               adc5g.set_spi_gain(self.roach, 0, core, 0)
 	      adc5g.set_spi_phase(self.roach, 0, core, 0)
 
-	self.roach.progdev(self.bitsream)
+	self.roach.progdev(self.bitstream)
 	
     def get_resid(self, freq, raw, pts = 50):
     
@@ -322,42 +322,41 @@ class ADC5g_Calibration_Tools (object):
          resid1, resid2 = self.calc_resid(freq,raw,pts)
          
          corrections = zeros((17,3), dtype = 'float')
-         wts = array([1.,2.,3.,4.,5.,6.,7.,8.,9.,10.,11.,12.,13.,14.,15.,16./
+         wts = array([1.,2.,3.,4.,5.,6.,7.,8.,9.,10.,11.,12.,13.,14.,15.,16.,
                  15.,14.,13.,12.,11.,10.,9.,8.,7.,6.,5.,4.,3.,2.,1.])
-                 
-        start_data = int(resid1[0])
-        file_limit = len(resid1)
-        data_limit = start_data+file_limit
-        print start_data, data_limit
-        if resid1[data_limit-start_data-1] != data_limit - 1:
-            raise RuntimeError('There are holes in the residuals')
-            
-        for corr_level in range(17):
-            a = corr_level*16 - 15 - start_data
-            b = a + 31
-            if a < 0:
-                a = 0
-            if a == 0 and start_data == 0:
-                a = 1
-            if b > file_limit:
-                b = file_limit
-            if b == file_limit and data_limit == 256:
-                b -= 1
-            if a > b:
-                continue
-            wt_a = a - corr_level*16 + 15 + start_data
-            wt_b = wt_a -a + b
-            wt = sum(wts[wt_a:wt_b])
-            av1 = sum(resid1[a:b]*wts[wt_a:wt_b])/wt
-            av2 = sum(resid2[a:b]*wts[wt_a:wt_b])/wt
-            print "%d %7.5f %7.5f %7.5f %7.5f" %  (16*corr_level,av1,av2,av3,av4)
-            corrections[corr_level][0] = 16*corr_level
-            corrections[corr_level][1] = av1
-            corrections[corr_level][2] = av2
+	 start_data = int(resid1[0])
+	 file_limit = len(resid1)
+	 data_limit = start_data+file_limit
+	 #print start_data, data_limit
+	 if resid1[data_limit-start_data-1] != data_limit - 1:
+		 raise RuntimeError('There are holes in the residuals')
+
+	 for corr_level in range(17):
+		 a = corr_level*16 - 15 - start_data
+		 b = a + 31
+		 if a < 0:
+			 a = 0
+		 if a == 0 and start_data == 0:
+			 a = 1
+		 if b > file_limit:
+			 b = file_limit
+		 if b == file_limit and data_limit == 256:
+			 b -= 1
+		 if a > b:
+			 continue
+		 wt_a = a - corr_level*16 + 15 + start_data
+		 wt_b = wt_a -a + b
+		 wt = sum(wts[wt_a:wt_b])
+		 av1 = sum(resid1[a:b]*wts[wt_a:wt_b])/wt
+		 av2 = sum(resid2[a:b]*wts[wt_a:wt_b])/wt
+		 #print "%d %7.5f %7.5f %7.5f %7.5f" %  (16*corr_level,av1,av2,av3,av4)
+		 corrections[corr_level][0] = 16*corr_level
+		 corrections[corr_level][1] = av1
+		 corrections[corr_level][2] = av2
         
-        return corrections
+	 return corrections
         
-    def do_inl_sweep(self, freqs, zdoks = [0], save = False, fname = 'inl_default.npz')
+    def do_inl_sweep(self, freqs, zdoks = [0], save = False, fname = 'inl_default.npz'):
     	
     	inlA = {}
     	inlB = {}
@@ -386,9 +385,6 @@ class ADC5g_Calibration_Tools (object):
 		np.savez(fname, zdok0_inl = multi_inl)
 		
 	return multi_inl
-	
-	
-    	
 
 	    
     def plot_fit(self, freq, raw, pts=50):
