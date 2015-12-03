@@ -3,7 +3,7 @@ import adc5g
 from hp8780a import HP8780A
 import time
 import numpy as np
-from numpy import array
+from numpy import array, mean
 from scipy.optimize import leastsq
 from scipy.optimize import curve_fit
 import math
@@ -28,19 +28,14 @@ def sin_residuals(p, sin, cos, raw):
 
 class ADC5g_Calibration_Tools (object):
     
-    def __init__(self, roach, clk):
+    def __init__(self, roach, roach_id = '172.30.51.97', clk=1600):
 
-        self.roach = roach
+        self.roach_id = roach_id
         self.bitstream = 'adc5g_tim_aleks_test_2015_Oct_14_1208.bof.gz'
         self.clk = clk
-
-    def sin_residuals(p, sin, cos, raw):
-
-        res = raw - fitsin(p, sin, cos)
-	for i in range(raw.size):
-            if raw[i] == -128 or raw[i] == 127:
-                res[i] = 0
-        return res
+	self.roach = roach
+	#self.roach = katcp_wrapper.FpgaClient(roach_id)
+	#self.roach.progdev(self.bitstream)
 
     def fit_snap(self, freq, raw): 
 
@@ -111,11 +106,6 @@ class ADC5g_Calibration_Tools (object):
         a1p = 100*(avamp-amp1)/avamp 
         a2p = 100*(avamp-amp2)/avamp 
         avdly = (dly1+dly2)/2.0
-        
-	#print "#%6.2f  zero(mV) amp(%%)  dly(ps) (adj by .4, .14, .11)" % (freq)
-        #print "#avg    %7.4f %7.4f %8.4f" %  (avz, avamp, avdly)
-        #print "core 1  %7.4f %7.4f %8.4f" %  (z1-true_zero, a1p, dly1-avdly)
-        #print "core 2  %7.4f %7.4f %8.4f" %  (z2-true_zero, a2p, dly2-avdly)
         
         ogp1 = (z1-true_zero, a1p, dly1-avdly)
 	ogp2 = (z2-true_zero, a2p, dly2-avdly)
@@ -261,9 +251,9 @@ class ADC5g_Calibration_Tools (object):
 
         N = float(len(raw))
 
-        raw_off = np.sum(raw)/N
+        raw_off = sum(raw)/N
 	    
-	raw_amp = np.sum(abs(raw-raw_off))/N
+	raw_amp = sum(abs(raw-raw_off))/N
 
 	multiple_ogp = []
 
@@ -272,10 +262,10 @@ class ADC5g_Calibration_Tools (object):
 		core = raw[i::2]
 		n = float(len(core))
 
-		off = (np.sum(core)/n)*(-500.0/256.0)
-		amp = np.sum(abs(core-off))/n
+		off = (sum(core)/n)*(-500.0/256.0)
+		amp = sum(abs(core-off))/n
 		rel_amp = 100.0*(raw_amp-amp)/raw_amp
-		    
+		
 		ogp_core = (off, rel_amp, 0)
 		multiple_ogp.append(ogp_core)
 
@@ -381,8 +371,11 @@ if __name__ == '__main__':
 	paramsA, paramsB = adc_cal.fit_snap(freq, rawAB)
 	paramsC, paramsD = adc_cal.fit_snap(freq, rawCD)
 
-	ogpA[freq], ogpB[freq] = adc_cal.convert_fit_to_ogp(freq, paramsA, paramsB)
-	ogpC[freq], ogpD[freq] = adc_cal.convert_fit_to_ogp(freq, paramsC, paramsD)
+	ogpA[freq], ogpB[freq] = adc_cal.convert_fit_to_ogp(freq, paramsA, 
+							    paramsB)
+
+	ogpC[freq], ogpD[freq] = adc_cal.convert_fit_to_ogp(freq, paramsC, 
+							    paramsD)
 
     ogpA_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpA.values())))
     ogpB_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpB.values())))
