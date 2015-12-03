@@ -305,8 +305,105 @@ class ADC5g_Calibration_Tools (object):
 	      adc5g.set_spi_phase(self.roach, 0, core, 0)
 
 	self.roach.progdev(self.bitsream)
+	
+    def get_resid(self, freq, raw, pts = 50):
+    
+        params1,params2 = self.fit_snap(freq, raw)
+
+	raw = raw[:pts]
+
+        core1 = raw[0::2]
+        core2 = raw[1::2]
+
+        x1 = x[0::2]
+        x2 = x[1::2]
+
+	y1 =  syn_func(x1, params1[0][0], params1[0][1], params1[0][2])
+	y2 =  syn_func(x2, params2[0][0], params2[0][1], params2[0][2])
+ 
+        resid1 = y1 - core1
+        resid2 = y2 - core2
+        
+        return resid1
+        return resid2
+        
+    def convert_residuals_to_inl(self, freq, raw, pts = 50):
+         
+         resid1, resid2 = self.calc_resid(freq,raw,pts)
+         
+         corrections = zeros((17,3), dtype = 'float')
+         wts = array([1.,2.,3.,4.,5.,6.,7.,8.,9.,10.,11.,12.,13.,14.,15.,16./
+                 15.,14.,13.,12.,11.,10.,9.,8.,7.,6.,5.,4.,3.,2.,1.])
+                 
+        start_data = int(resid1[0])
+        file_limit = len(resid1)
+        data_limit = start_data+file_limit
+        print start_data, data_limit
+        if resid1[data_limit-start_data-1] != data_limit - 1:
+            raise RuntimeError('There are holes in the residuals')
+            
+        for corr_level in range(17):
+            a = corr_level*16 - 15 - start_data
+            b = a + 31
+            if a < 0:
+                a = 0
+            if a == 0 and start_data == 0:
+                a = 1
+            if b > file_limit:
+                b = file_limit
+            if b == file_limit and data_limit == 256:
+                b -= 1
+            if a > b:
+                continue
+            wt_a = a - corr_level*16 + 15 + start_data
+            wt_b = wt_a -a + b
+            wt = sum(wts[wt_a:wt_b])
+            av1 = sum(resid1[a:b]*wts[wt_a:wt_b])/wt
+            av2 = sum(resid2[a:b]*wts[wt_a:wt_b])/wt
+            print "%d %7.5f %7.5f %7.5f %7.5f" %  (16*corr_level,av1,av2,av3,av4)
+            corrections[corr_level][0] = 16*corr_level
+            corrections[corr_level][1] = av1
+            corrections[corr_level][2] = av2
+        
+        return corrections
+        
+    def do_inl_sweep(self, freqs, zdoks = [0], save = False, fname = 'inl_default.npz')
+    	
+    	inlA = {}
+    	inlB = {}
+    	inlC = {}
+    	inlD = {}
+    	
+    	rawAB = adc5g.get_snapshot(self.roach, 'scope_raw_a%i_snap' %(zdok))
+	rawCD = adc5g.get_snapshot(self.roach, 'scope_raw_c%i_snap' %(zdok))
+	
+	residA, residB = self.get_resid(freq, rawAB, pts)
+	residC, residD = self.get_resid(freq, rawCD, pts)
+	
+	correctionsAB = self.convert_residuals_to_inl(freq, rawAB, pts)
+	correctionsCD = self.convert_residuals_to_inl(freq, rawCD, pts)
+	
+	inlA = correctionsAB[:],[1]
+	inlB = correctionsAB[:], [2]
+	inlC = correctionsCD[:], [1]
+	inlD = correctionsCD[:], [2]
+	
+	code_num = correctionsAB[:],[0]
+	
+	multi_inl = (code_num, inlA, inlB, inlC, inlD)
+	
+	if save:
+		np.savez(fname, zdok0_inl = multi_inl)
+		
+	return multi_inl
+	
+	
+    	
+
 	    
     def plot_fit(self, freq, raw, pts=50):
+	
+	resid1, resid2 = self.get_resid(freq, raw, pts)
 	
 	params1,params2 = self.fit_snap(freq, raw)
 
@@ -341,8 +438,8 @@ class ADC5g_Calibration_Tools (object):
 	ax2.plot(x2, core2, 'o', color='r')
 	ax2.set_title('Core 2 Fit')
 
-	ax3.plot(x1, y1-core1, 'o')
-	ax3.plot(x2, y2-core2, 'o')
+	ax3.plot(x1, resid1, 'o')
+	ax3.plot(x2, resid2, 'o')
 	ax3.set_title('Residuals')
 
 	plt.tight_layout()
