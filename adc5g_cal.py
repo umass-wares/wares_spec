@@ -272,7 +272,7 @@ class ADC5g_Calibration_Tools (object):
 	return multiple_ogp
 
 
-    def update_ogp(self, fname='ogp_default.npz'):
+    def update_ogp(self, fname='ogp_noise_default.npz'):
 
         zdok = 0
 
@@ -385,6 +385,34 @@ class ADC5g_Calibration_Tools (object):
 		np.savez(fname, zdok0_inl = multi_inl)
 		
 	return multi_inl
+ 
+    def set_inl(self, fname = 'inl_default.npz'):
+
+        zdok = 0        
+        
+        df = np.load(fname)
+	zdok0_inl = df['zdok0_inl']
+ 
+        adc5g.set_inl_registers(self.roach,zdok,1,zdok0_inl[1])
+        adc5g.set_inl_registers(self.roach,zdok,2,zdok0_inl[2])
+        #adc5g.set_inl_registers(self.roach,zdok,1,zdok0_inl[3])
+        #adc5g.set_inl_registers(self.roach,zdok,2,zdok0_inl[4])
+             
+        
+ 
+    def update_inl(self, fname='inl_default.npz'):
+
+        zdok = 0
+
+	df = np.load(fname)
+	zdok0_inl = df['zdok0_inl']
+
+	print
+	print "Setting inl for zdok0..."
+	print zdok0_inl
+	print
+	
+	self.set_inl(multiple_inl = zdok0_inl, zdok = zdok)
 
 	    
     def plot_fit(self, freq, raw, pts=50):
@@ -485,7 +513,3 @@ if __name__ == '__main__':
     np.savez('ogp_default.npz', zdok0_ogp = multi_ogp)
 
     #adc_cal.set_ogp(zdok, cores, multi_ogp)
-
-	
-
-	
