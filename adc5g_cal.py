@@ -413,6 +413,17 @@ class ADC5g_Calibration_Tools (object):
 	print
 	
 	self.set_inl(multiple_inl = zdok0_inl, zdok = zdok)
+ 
+    def clear_inl(self):
+        
+        for core in range(1,5):
+
+              adc5g.set_inl(self.roach, zdok, core, 0)
+              
+
+	self.roach.progdev(self.bitstream)
+        
+       
 
 	    
     def plot_fit(self, freq, raw, pts=50):
