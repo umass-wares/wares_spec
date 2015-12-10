@@ -296,14 +296,16 @@ class ADC5g_Calibration_Tools (object):
 
 	self.roach.progdev(self.bitstream)
 	
-    def get_resid(self, freq, raw, pts = 50):
+    def get_resid(self, freq, raw):
     
         params1,params2 = self.fit_snap(freq, raw)
 
-	raw = raw[:pts]
-
         core1 = raw[0::2]
         core2 = raw[1::2]
+
+	del_phi = 2*np.pi*freq/self.clk
+
+	x = [del_phi*i for i in range(len(raw))]
 
         x1 = x[0::2]
         x2 = x[1::2]
@@ -314,22 +316,21 @@ class ADC5g_Calibration_Tools (object):
         resid1 = y1 - core1
         resid2 = y2 - core2
         
-        return resid1
-        return resid2
+        return resid1, resid2
         
-    def convert_residuals_to_inl(self, freq, raw, pts = 50):
+    def convert_residuals_to_inl(self, freq, raw):
          
-         resid1, resid2 = self.calc_resid(freq,raw,pts)
+         resid1, resid2 = self.get_resid(freq,raw)
          
-         corrections = zeros((17,3), dtype = 'float')
+         corrections = np.zeros((17,3), dtype = 'float')
          wts = array([1.,2.,3.,4.,5.,6.,7.,8.,9.,10.,11.,12.,13.,14.,15.,16.,
                  15.,14.,13.,12.,11.,10.,9.,8.,7.,6.,5.,4.,3.,2.,1.])
 	 start_data = int(resid1[0])
 	 file_limit = len(resid1)
 	 data_limit = start_data+file_limit
 	 #print start_data, data_limit
-	 if resid1[data_limit-start_data-1] != data_limit - 1:
-		 raise RuntimeError('There are holes in the residuals')
+	# if resid1[data_limit-start_data-1] != data_limit - 1:
+	#	 raise RuntimeError('There are holes in the residuals')
 
 	 for corr_level in range(17):
 		 a = corr_level*16 - 15 - start_data
@@ -356,7 +357,7 @@ class ADC5g_Calibration_Tools (object):
         
 	 return corrections
         
-    def do_inl_sweep(self, freqs, zdoks = [0], save = False, fname = 'inl_default.npz'):
+    def do_inl_sweep(self, freq, zdok = [0], save = False, fname = 'inl_default.npz'):
     	
     	inlA = {}
     	inlB = {}
@@ -366,18 +367,14 @@ class ADC5g_Calibration_Tools (object):
     	rawAB = adc5g.get_snapshot(self.roach, 'scope_raw_a%i_snap' %(zdok))
 	rawCD = adc5g.get_snapshot(self.roach, 'scope_raw_c%i_snap' %(zdok))
 	
-	residA, residB = self.get_resid(freq, rawAB, pts)
-	residC, residD = self.get_resid(freq, rawCD, pts)
+	residA, residB = self.get_resid(freq, rawAB)
+	residC, residD = self.get_resid(freq, rawCD)
 	
-	correctionsAB = self.convert_residuals_to_inl(freq, rawAB, pts)
-	correctionsCD = self.convert_residuals_to_inl(freq, rawCD, pts)
+	correctionsAB = self.convert_residuals_to_inl(freq, rawAB)
+	correctionsCD = self.convert_residuals_to_inl(freq, rawCD)
 	
-	inlA = correctionsAB[:],[1]
-	inlB = correctionsAB[:], [2]
-	inlC = correctionsCD[:], [1]
-	inlD = correctionsCD[:], [2]
-	
-	code_num = correctionsAB[:],[0]
+	code_num,inlA,inlB = zip(*correctionsAB)
+	code_num,inlC,inlD = zip(*correctionsCD)
 	
 	multi_inl = (code_num, inlA, inlB, inlC, inlD)
 	
@@ -385,6 +382,7 @@ class ADC5g_Calibration_Tools (object):
 		np.savez(fname, zdok0_inl = multi_inl)
 		
 	return multi_inl
+    
  
     def set_inl(self, fname = 'inl_default.npz'):
 
@@ -395,8 +393,8 @@ class ADC5g_Calibration_Tools (object):
  
         adc5g.set_inl_registers(self.roach,zdok,1,zdok0_inl[1])
         adc5g.set_inl_registers(self.roach,zdok,2,zdok0_inl[2])
-        #adc5g.set_inl_registers(self.roach,zdok,1,zdok0_inl[3])
-        #adc5g.set_inl_registers(self.roach,zdok,2,zdok0_inl[4])
+        adc5g.set_inl_registers(self.roach,zdok,3,zdok0_inl[3])
+        adc5g.set_inl_registers(self.roach,zdok,4,zdok0_inl[4])
              
         
  
