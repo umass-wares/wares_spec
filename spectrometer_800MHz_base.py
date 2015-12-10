@@ -23,7 +23,7 @@ import matplotlib.animation as animation
 import sys
 from scheduler import Task, Scheduler
 
-bitstream = 'r_spec_1600mhz_r112_asiaa_adc_2015_Nov_25_1417.bof.gz'
+bitstream = 'rspec_1600mhz_r112_asiaa_adc_2_2015_Dec_09_1219.bof.gz'
 katcp_port = 7147
 
 intnum = 1
