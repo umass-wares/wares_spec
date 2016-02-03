@@ -49,7 +49,8 @@ class FPGA(object):
         self.acc_n = 0
         self.numchannels = numchannels
         self.bandwidth = bandwidth
-        self.freq = numpy.arange(self.numchannels)*self.bandwidth/self.numchannels
+        self.freq = numpy.arange(self.numchannels)\
+            *float(self.bandwidth)/self.numchannels
         self.set_logging()
         self.connect()
         self.program()
