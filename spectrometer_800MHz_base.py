@@ -23,7 +23,7 @@ import matplotlib.animation as animation
 import sys
 from scheduler import Task, Scheduler
 
-bitstream = 'r_spec_1600mhz_r112_asiaa_adc_2015_Nov_25_1417.bof.gz'
+bitstream = 'rspec_1600mhz_r112_asiaa_adc_2_2015_Dec_09_1219.bof.gz'
 katcp_port = 7147
 
 intnum = 1
@@ -49,7 +49,8 @@ class FPGA(object):
         self.acc_n = 0
         self.numchannels = numchannels
         self.bandwidth = bandwidth
-        self.freq = numpy.arange(self.numchannels)*self.bandwidth/self.numchannels
+        self.freq = numpy.arange(self.numchannels)\
+            *float(self.bandwidth)/self.numchannels
         self.set_logging()
         self.connect()
         self.program()

@@ -5,7 +5,7 @@ from corr import katcp_wrapper
 roach = katcp_wrapper.FpgaClient('172.30.51.97')
 adc_cal = ADC5g_Calibration_Tools(roach, clk=1600)
 
-df = np.load('ogp_default.npz')
+df = np.load('ogp_noise_default.npz')
 
 zdok0_ogp = df['zdok0_ogp']
 
@@ -17,5 +17,9 @@ print "Setting ogp for zdok0..."
 print zdok0_ogp
 print
 
+<<<<<<< HEAD
+adc_cal.set_ogp(zdok0_ogp, zdok, cores)
+=======
 #Set the ogp
 adc_cal.set_ogp(zdok, cores, zdok0_ogp)
+>>>>>>> 81e70b7763947fa2aa591819a6ac686132a17506
