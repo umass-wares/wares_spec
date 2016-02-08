@@ -97,10 +97,10 @@ class FPGA(object):
         #time.sleep(0.5)
         #print 'Setting digital gain of all channels to %i...' % self.gain,
         #if not self.skip:
-         #   self.fpga.write_int('gain', self.gain) #write the same gain for all inputs, all channels
-            print 'done'
-        else:   
-            print 'Skipped.'
+        #   self.fpga.write_int('gain', self.gain) 
+        #    print 'done'
+        #else:   
+        #    print 'Skipped.'
 
         #time.sleep(0.5)
         print 'Setting Shift schedule for FFT to %i...' % self.shift,
@@ -317,9 +317,9 @@ if __name__ == '__main__':
     p.add_option('-l', '--acc_len', dest='acc_len',
                  type='int', default=2*(2**28)/2048,
                  help='Set the number of vectors to accumulate between dumps. default is 2*(2^28)/2048, or just under 2 seconds.')
-   # p.add_option('-g', '--gain', dest='gain', type='int',
+    p.add_option('-g', '--gain', dest='gain', type='int',
                  default=0xffffffff,
-                 #help='Set the digital gain (6bit quantisation scalar). Default is 0xffffffff (max), good for wideband noise. Set lower for CW tones.')
+                 help='Set the digital gain (6bit quantisation scalar). Default is 0xffffffff (max), good for wideband noise. Set lower for CW tones.')
     p.add_option('-s', '--skip', dest='skip', action='store_true',
                  help='Skip reprogramming the FPGA and configuring EQ.')
     p.add_option('-b', '--bof', dest='boffile',
