@@ -17,9 +17,5 @@ print "Setting ogp for zdok0..."
 print zdok0_ogp
 print
 
-<<<<<<< HEAD
-adc_cal.set_ogp(zdok0_ogp, zdok, cores)
-=======
 #Set the ogp
-adc_cal.set_ogp(zdok, cores, zdok0_ogp)
->>>>>>> 81e70b7763947fa2aa591819a6ac686132a17506
+adc_cal.set_ogp(zdok0_ogp, zdok, cores)
