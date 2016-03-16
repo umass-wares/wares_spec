@@ -9,6 +9,10 @@ from scipy.optimize import curve_fit
 import math
 from matplotlib import pyplot as plt
 
+#
+# Functions used by the fitting routines
+#
+
 def syn_func( x, off, a1, a2):
         return off +  a1*np.sin(x) + a2*np.cos(x)
 
@@ -25,6 +29,12 @@ def sin_residuals(p, sin, cos, raw):
                 res[i] = 0
         return res
 
+#
+# ADC Calibration Tools
+#
+# 
+#
+#
 
 class ADC5g_Calibration_Tools (object):
     
@@ -34,9 +44,14 @@ class ADC5g_Calibration_Tools (object):
         self.bitstream = 'adc5g_tim_aleks_test_2015_Oct_14_1208.bof.gz'
         self.clk = clk
 	self.roach = roach
+	self.freqs = np.arange(6)*50 + 100.0
 	#self.roach = katcp_wrapper.FpgaClient(roach_id)
 	#self.roach.progdev(self.bitstream)
 
+    #	
+    # Takes a raw snap shot of time domain signal and finds fitted parameters
+    # to linear sine function (y = A*cos(x) + B*sin(x) + offset)
+    #
     def fit_snap(self, freq, raw): 
 
         del_phi = 2*math.pi*freq/self.clk
@@ -83,6 +98,10 @@ class ADC5g_Calibration_Tools (object):
 
 	#return plsq1, plsq2
 
+    #
+    # Takes fitted parameters from a linear sine model and determines
+    # values for offset, gain and phase corrections on ADC
+    #
     def convert_fit_to_ogp(self, freq, params1, params2):
 
         z_fact = -500.0/256.0
@@ -114,39 +133,43 @@ class ADC5g_Calibration_Tools (object):
 
         return multiple_ogp
 
-    def convert_fit_to_ogp_nonlin(self, freq, params1, params2):
+#    def convert_fit_to_ogp_nonlin(self, freq, params1, params2):
 
-        z_fact = -500.0/256.0
-        true_zero = 0.0 * z_fact
-        d_fact = 1e12/(2*np.pi*freq*1e6)
+#        z_fact = -500.0/256.0
+#        true_zero = 0.0 * z_fact
+#        d_fact = 1e12/(2*np.pi*freq*1e6)
 
-        z1 = z_fact * params1[0][0]
-        #sin1a = params1[0][1]
-        #cos1a = params1[0][2]
-        amp1 = params1[0][1] #math.sqrt(sin1a**2 + cos1a**2)
-        dly1 = params1[0][1] #d_fact*math.atan2(sin1a, cos1a)
+#        z1 = z_fact * params1[0][0]
+#        #sin1a = params1[0][1]
+#        #cos1a = params1[0][2]
+#        amp1 = params1[0][1] #math.sqrt(sin1a**2 + cos1a**2)
+#        dly1 = params1[0][1] #d_fact*math.atan2(sin1a, cos1a)
 	
-	z2 = z_fact * params2[0][0]
-        #sin2a = params2[0][1]
-        #cos2a = params2[0][2]
-        amp2 = params2[0][1] #math.sqrt(sin2a**2 + cos2a**2)
-        dly2 = params2[0][2] #d_fact*math.atan2(sin2a, cos2a)
+#	z2 = z_fact * params2[0][0]
+#        #sin2a = params2[0][1]
+#        #cos2a = params2[0][2]
+#        amp2 = params2[0][1] #math.sqrt(sin2a**2 + cos2a**2)
+#        dly2 = params2[0][2] #d_fact*math.atan2(sin2a, cos2a)
 
-	avz = (z1+z2)/2.0
-        avamp = (amp1+amp2)/2.0
-        a1p = 100*(avamp-amp1)/avamp 
-        a2p = 100*(avamp-amp2)/avamp 
-        avdly = (dly1+dly2)/2.0
+#	avz = (z1+z2)/2.0
+#        avamp = (amp1+amp2)/2.0
+#        a1p = 100*(avamp-amp1)/avamp 
+#        a2p = 100*(avamp-amp2)/avamp 
+#        avdly = (dly1+dly2)/2.0
         
-        ogp1 = (z1-true_zero, a1p, dly1-avdly)
-	ogp2 = (z2-true_zero, a2p, dly2-avdly)
+#       ogp1 = (z1-true_zero, a1p, dly1-avdly)
+#	ogp2 = (z2-true_zero, a2p, dly2-avdly)
 
-	multiple_ogp = (ogp1,ogp2)
+#	multiple_ogp = (ogp1,ogp2)
 
-        return multiple_ogp
+#       return multiple_ogp
         
 
-    def get_ogp(self, zdok, cores):
+    #
+    # Returns the current ogp values from an ADC (zdok = 0 or 1) for a list
+    # of sampling cores (cores = [0,1,2,3])
+    #
+    def get_ogp(self, zdok = 0, cores = [0,1,2,3]):
         
         multiple_ogp = []
 
@@ -160,6 +183,10 @@ class ADC5g_Calibration_Tools (object):
 
         return multiple_ogp
 
+    #
+    # Sets ogp values contained in 'multiple_ogp' array for each core in 'cores'
+    # on specified ADC ('zdok')
+    #
     def set_ogp(self, multiple_ogp, zdok, cores=[1,2,3,4]):
 
         adc5g.set_spi_control(self.roach, zdok)
@@ -179,10 +206,14 @@ class ADC5g_Calibration_Tools (object):
 
 	self.roach.progdev(self.bitstream)
 
-    def do_ogp_sweep(self, freqs, zdoks=[0], save=False, fname='ogp_default.npz'):
+    #
+    # Generates frequency averaged ogp values based on sine fitting
+    #
+    def do_ogp_sweep(self, zdoks=[0], save=False, fname='ogp_default.npz'):
 
-        freqs = np.arange(6)*50 + 100.0
 	syn = HP8780A()
+
+	freqs = self.freqs
 
 	zdok = 0
 
@@ -219,6 +250,10 @@ class ADC5g_Calibration_Tools (object):
 
 	return multi_ogp
 
+
+    #
+    # Generates average ogp values based on noise source fitting
+    #
     def do_ogp_noise_source(self, rpt, save=False, fname='ogp_noise_default.npz'):
 
         ogpA = {}
@@ -228,8 +263,8 @@ class ADC5g_Calibration_Tools (object):
 
         for i in range(rpt):
 
-		rawAB = adc5g.get_snapshot(self.roach, 'scope_raw_a0_snap') 
-		rawCD = adc5g.get_snapshot(self.roach, 'scope_raw_c0_snap')
+		rawAB = np.array(adc5g.get_snapshot(self.roach, 'scope_raw_a0_snap')) 
+		rawCD = np.array(adc5g.get_snapshot(self.roach, 'scope_raw_c0_snap'))
 
 		ogpA[i], ogpB[i] = self.convert_noise_to_ogp(rawAB)
 		ogpC[i], ogpD[i] = self.convert_noise_to_ogp(rawCD)
@@ -246,24 +281,27 @@ class ADC5g_Calibration_Tools (object):
 
         return multi_ogp
 	
-		
+    #
+    # Takes noise source measurement and determines values for ogp corrections 
+    # on ADC
+    #
     def convert_noise_to_ogp(self, raw):
 
-        N = float(len(raw))
+        N = len(raw)
 
-        raw_off = sum(raw)/N
+        raw_off = sum(raw)/float(N)
 	    
-	raw_amp = sum(abs(raw-raw_off))/N
+	raw_amp = sum(abs(raw-raw_off))/float(N)
 
 	multiple_ogp = []
 
 	for i in range(0,2):
 
 		core = raw[i::2]
-		n = float(len(core))
+		n = len(core)
 
 		off = (sum(core)/n)*(-500.0/256.0)
-		amp = sum(abs(core-off))/n
+		amp = sum(abs(core-off))/float(n)
 		rel_amp = 100.0*(raw_amp-amp)/raw_amp
 		
 		ogp_core = (off, rel_amp, 0)
@@ -271,7 +309,9 @@ class ADC5g_Calibration_Tools (object):
 
 	return multiple_ogp
 
-
+    #
+    # Updates ogp from file
+    #
     def update_ogp(self, fname='ogp_noise_default.npz'):
 
         zdok = 0
@@ -286,6 +326,9 @@ class ADC5g_Calibration_Tools (object):
 	
 	self.set_ogp(multiple_ogp = zdok0_ogp, zdok = zdok)
 
+    #
+    # Sets all ogp to 0
+    #
     def clear_ogp(self):
 
 	for core in range(1,5):
@@ -296,6 +339,9 @@ class ADC5g_Calibration_Tools (object):
 
 	self.roach.progdev(self.bitstream)
 	
+    #
+    # Determines residuals from raw snapshot and fitted sine
+    #
     def get_resid(self, freq, raw):
     
         params1,params2 = self.fit_snap(freq, raw)
@@ -317,7 +363,10 @@ class ADC5g_Calibration_Tools (object):
         resid2 = y2 - core2
         
         return resid1, resid2
-        
+
+    #
+    # Determines INL corrections based on residual data
+    #
     def convert_residuals_to_inl(self, freq, raw):
          
          resid1, resid2 = self.get_resid(freq,raw)
@@ -384,20 +433,22 @@ class ADC5g_Calibration_Tools (object):
 	return multi_inl
     
  
-    def set_inl(self, fname = 'inl_default.npz'):
+#    def set_inl(self, fname = 'inl_default.npz'):
 
-        zdok = 0        
+#        zdok = 0        
         
-        df = np.load(fname)
-	zdok0_inl = df['zdok0_inl']
+#        df = np.load(fname)
+#	zdok0_inl = df['zdok0_inl']
  
-        adc5g.set_inl_registers(self.roach,zdok,1,zdok0_inl[1])
-        adc5g.set_inl_registers(self.roach,zdok,2,zdok0_inl[2])
-        adc5g.set_inl_registers(self.roach,zdok,3,zdok0_inl[3])
-        adc5g.set_inl_registers(self.roach,zdok,4,zdok0_inl[4])
+#        adc5g.set_inl_registers(self.roach,zdok,1,zdok0_inl[1])
+#        adc5g.set_inl_registers(self.roach,zdok,2,zdok0_inl[2])
+#        adc5g.set_inl_registers(self.roach,zdok,3,zdok0_inl[3])
+#        adc5g.set_inl_registers(self.roach,zdok,4,zdok0_inl[4])
              
         
- 
+    #
+    # Sets INL corrections from saved file
+    #
     def update_inl(self, fname='inl_default.npz'):
 
         zdok = 0
@@ -412,6 +463,9 @@ class ADC5g_Calibration_Tools (object):
 	
 	self.set_inl(multiple_inl = zdok0_inl, zdok = zdok)
  
+    #
+    # Sets all INL to 0
+    #
     def clear_inl(self):
         
         zdok = 0
@@ -424,7 +478,9 @@ class ADC5g_Calibration_Tools (object):
         
        
 
-	    
+    #
+    # Helper function for visualizing the fitted sine function to raw snapshot
+    #
     def plot_fit(self, freq, raw, pts=50):
 	
 	resid1, resid2 = self.get_resid(freq, raw)
@@ -473,8 +529,9 @@ class ADC5g_Calibration_Tools (object):
     
 if __name__ == '__main__':
 
+    # Program ROACH in ipython shell...
+    #
     #roach = katcp_wrapper.FpgaClient('172,30.51.97')
-    #print roach.is_connected()
     #roach.progdev('adc5g_tim_aleks_test_2015_Oct_14_1208.bof.gz')
 
     freqs = np.arange(6)*50 + 100.0
@@ -520,6 +577,6 @@ if __name__ == '__main__':
     #print ogpC_m
     #print ogpD_m
 
-    np.savez('ogp_default.npz', zdok0_ogp = multi_ogp)
+    np.savez('ogp_new.npz', zdok0_ogp = multi_ogp)
 
     #adc_cal.set_ogp(zdok, cores, multi_ogp)
