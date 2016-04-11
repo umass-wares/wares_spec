@@ -407,6 +407,20 @@ class FPGA(object):
         fpga.stop()
         print "Stopping"
         numpy.savetxt('data.txt', self.data/float(self.accum_count))
+
+
+    def integrate_for_allan(self, integtime):
+
+        self.data = np.zeros(self.numchannels, dtype='float')
+        self.accum_count = 0
+        self.prev_acc_n = 0
+
+        self.reset()
+
+        time.sleep(integtime)
+        acc_n, data = self.get_data()
+        return data #/float(acc_n)
+
      
 class Integration(object):
 
