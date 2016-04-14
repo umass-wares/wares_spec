@@ -2,12 +2,12 @@ import numpy as np
 from numpy import vstack
 from matplotlib import pyplot as plt
 
-Nout = 500
+Nout = 4000
 maxk = Nout/4
 sampleint = 0.5
 
-lochan = 1200
-hichan = 1800 
+lochan = 1
+hichan = 2048 
 
 BW = 800.e6/(2048.)
 
@@ -50,7 +50,7 @@ for k in range(1,maxk+1):
 alanvar = np.array(alanvar)
 time = sampleint+np.arange(maxk)*sampleint
 
-theory = np.sqrt(2)/(np.sqrt(BW)*np.sqrt(time))
+theory = 1./(np.sqrt(BW)*np.sqrt(time))
 #theory = 1./np.sqrt(time)
 
 #plt.plot(time, alanvar, marker='o')
@@ -58,4 +58,7 @@ theory = np.sqrt(2)/(np.sqrt(BW)*np.sqrt(time))
 plt.plot(time, alanvar/theory)
 plt.xscale('log')
 plt.yscale('log')
+plt.xlabel('Integration Time')
+plt.ylabel('$\sigma_{Allan}$ / $\sigma_{Theory}$')
+plt.title('Allan Plot 800 MHz Spectrometer')
 plt.show()
