@@ -516,7 +516,7 @@ class ADC5g_Calibration_Tools (object):
     #
     # Helper function for visualizing the fitted sine function to raw snapshot
     #
-    def plot_fit(self, freq, raw, pts=50):
+    def plot_fit(self, raw, freq, pts=50):
 	
 	resid1, resid2 = self.get_resid(freq, raw)
 	
