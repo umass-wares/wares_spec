@@ -155,37 +155,38 @@ class FPGA(object):
         self.acc_n = self.fpga.read_uint('sync_cnt')
         return self.acc_n    
     
-    def get_data(self):
+    def get_data(self, chan):
         t1 = time.time()
         acc_n = self.get_acc_n()
         
         #
         # GET DATA
         #
-        # Retrieves data from bram00-bram03 registers (ZDOK 0 only)
-        # Interleaves into full spectrum
+        # For quantized 32-bit vacc bram (unquantized 64-bit vacc needs '>%dq')
+        # Retrieves data from channel 'chan'
+        # Interleaves 4 bram blocks into full spectrum
         #
 
         a_0 = np.array(struct.unpack('>%dl' %(self.numchannels/4.), 
-                                        self.fpga.read('bram00',
+                                        self.fpga.read('bram%i0' %chan,
                                                        self.bram_size*(self.numchannels/4), 0)
                                         ),
                           dtype='float')
 
         a_1 = np.array(struct.unpack('>%dl' % (self.numchannels/4.), 
-                                        self.fpga.read('bram01', 
+                                        self.fpga.read('bram%i1' %chan, 
                                                        self.bram_size*(self.numchannels/4), 0)
                                         ),
                           dtype='float')
 
         a_2 = np.array(struct.unpack('>%dl' % (self.numchannels/4.),
-                                        self.fpga.read('bram02',
+                                        self.fpga.read('bram%i2' %chan,
                                                        self.bram_size*(self.numchannels/4), 0)
                                         ),
                           dtype='float')
 
         a_3 = np.array(struct.unpack('>%dl' % (self.numchannels/4.),
-                                        self.fpga.read('bram03',
+                                        self.fpga.read('bram%i3' %chan,
                                                        self.bram_size*(self.numchannels/4), 0)
                                         ),
                           dtype='float')
@@ -219,7 +220,7 @@ class FPGA(object):
         txt += self.fpga.read('bram03', self.bram_size*(self.numchannels/4))
 
         print "acc_n = %d; Got data in %s secs" % (acc_n, time.time() - t1)
-        return acc_n, txt
+        #return acc_n, txt
 
     def get_data_normalize(self, sleep):
 
@@ -409,18 +410,18 @@ class FPGA(object):
         numpy.savetxt('data.txt', self.data/float(self.accum_count))
 
 
-    def integrate_for_allan(self, integtime):
+    def integrate_for_allan(self, chan, integtime):
 
-        self.data = np.zeros(self.numchannels, dtype='float')
-        self.accum_count = 0
-        self.prev_acc_n = 0
+        #self.data = np.zeros(self.numchannels, dtype='float')
+        #self.accum_count = 0
+        #self.prev_acc_n = 0
 
         self.reset()
 
         time.sleep(integtime)
-        acc_n, data = self.get_data()
+        acc_n, data = self.get_data(chan)
         return data #/float(acc_n)
-
+        
      
 class Integration(object):
 
