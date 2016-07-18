@@ -65,8 +65,8 @@ class ADC5g_Calibration_Tools (object):
         x1 = x[0::2]
         x2 = x[1::2]
         
-	p0 = [128.,90.,90.]
-        
+        p0 = [128.,90.,90.]
+                
         params1 = curve_fit(syn_func, x1, core1, p0)
 
         params2 = curve_fit(syn_func, x2, core2, p0)
@@ -108,14 +108,14 @@ class ADC5g_Calibration_Tools (object):
         z_fact = -500.0/256.0
         true_zero = 0.0 * z_fact
         d_fact = 1e12/(2*np.pi*freq*1e6)
-
+        
         z1 = z_fact * params1[0][0]
         sin1a = params1[0][1]
         cos1a = params1[0][2]
         amp1 = math.sqrt(sin1a**2 + cos1a**2)
         dly1 = d_fact*math.atan2(sin1a, cos1a)
 	
-	z2 = z_fact * params2[0][0]
+        z2 = z_fact * params2[0][0]
         sin2a = params2[0][1]
         cos2a = params2[0][2]
         amp2 = math.sqrt(sin2a**2 + cos2a**2)
@@ -133,6 +133,33 @@ class ADC5g_Calibration_Tools (object):
 	multiple_ogp = (ogp1,ogp2)
 
         return multiple_ogp
+        
+    def cal_sinad(self, freq, raw ):
+        del_phi = 2*math.pi*freq/self.clk
+
+        x  = [del_phi*i for i in range(len(raw))]
+        p0 = [128.,90.,90.]
+        
+        params0 = curve_fit(syn_func, x , raw  , p0)
+        
+        #z_fact = -500.0/256.0
+        #d_fact = 1e12/(2*np.pi*freq*1e6)
+        #z0 = z_fact * params0[0][0]
+        off = params0[0][0]
+        sin0a = params0[0][1]
+        cos0a = params0[0][2]
+        amp0 = math.sqrt(sin0a**2 + cos0a**2)
+        #dly0 = d_fact*math.atan2(sin0a, cos0a)
+        fit0 = syn_func(x, off, sin0a, cos0a)
+        ssq0 = 0.0
+        data_cnt = len(raw)
+        for i in range (data_cnt):
+            ssq0 += (raw[i]-fit0[i])**2
+        pwr_sinad = (amp0**2) / (2*ssq0/data_cnt)
+        sinad = 10.0 * math.log10(pwr_sinad)
+        
+        return sinad
+            
 
 #    def convert_fit_to_ogp_nonlin(self, freq, params1, params2):
 
@@ -210,7 +237,7 @@ class ADC5g_Calibration_Tools (object):
     #
     # Generates frequency averaged ogp values based on sine fitting
     #
-    def do_ogp_sweep(self, zdoks=[0], save=False, fname='ogp_default.npz'):
+    def do_ogp_sweep(self, zdoks=[0], save=False, fname='ogp_default.npz', sinad=True):
 
 	syn = HP8780A()
 
@@ -222,6 +249,8 @@ class ADC5g_Calibration_Tools (object):
 	ogpB = {}
 	ogpC = {}
 	ogpD = {}
+	sinadAB= {}
+	sinadCD= {}
 
 	for freq in freqs: # MHz
 
@@ -233,21 +262,32 @@ class ADC5g_Calibration_Tools (object):
 
 		paramsA, paramsB = self.fit_snap(freq, rawAB)
 		paramsC, paramsD = self.fit_snap(freq, rawCD)
-
+  
 		ogpA[freq], ogpB[freq] = self.convert_fit_to_ogp(freq, 
 								 paramsA, paramsB)
 		ogpC[freq], ogpD[freq] = self.convert_fit_to_ogp(freq, 
 								 paramsC, paramsD)
+		if sinad:
+		 sinadAB[freq] = self.cal_sinad(freq, rawAB)
+		 sinadCD[freq] = self.cal_sinad(freq, rawCD)
 
 	ogpA_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpA.values())))
         ogpB_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpB.values())))
         ogpC_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpC.values())))
         ogpD_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpD.values())))
 
-        multi_ogp = (ogpA_m,ogpB_m,ogpC_m,ogpD_m)
-
-	if save:
-		np.savez(fname, zdok0_ogp = multi_ogp)
+        
+        
+	if save:		
+		if sinad:
+		 sinadAB_m = tuple(sinadAB)
+		 sinadCD_m = tuple(sinadCD)
+		 multi_ogp = (ogpA_m,ogpB_m,ogpC_m,ogpD_m,sinadAB_m, sinadCD_m)
+		 np.savez(fname, zdok0_ogp = multi_ogp)
+		else:
+		 multi_ogp = (ogpA_m,ogpB_m,ogpC_m,ogpD_m)
+		 np.savez(fname, zdok0_ogp = multi_ogp)
+       
 
 	return multi_ogp
 
