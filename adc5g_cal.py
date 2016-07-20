@@ -523,15 +523,15 @@ class ADC5g_Calibration_Tools (object):
 	        Get INL correction coefficients (17 coeff/core)
 	    """
 
-        multi_inl = []
+	    multi_inl = []
 
-        for core in cores:
+	    for core in cores:
 
-            inl = adc5g.get_inl_registers(self.roach, zdok, core)
+		    inl = adc5g.get_inl_registers(self.roach, zdok, core)
             
-            multi_inl.append(inl)
+		    multi_inl.append(inl)
 
-        return multi_inl
+	    return multi_inl
 
 
     def do_inl_sweep(self, freq, zdok = [0], save = False, fname = 'inl_default.npz'):
