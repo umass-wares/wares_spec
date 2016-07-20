@@ -18,9 +18,6 @@ from matplotlib import mlab
 def syn_func( x, off, a1, a2):
         return off +  a1*np.sin(x) + a2*np.cos(x)
 
-def syn_func_nonlin( x, off, a1, p1):
-        return off +  a1*np.sin(x+p1) 
-
 def fitsin(p, sin, cos):
 	return p[0] + p[1]*sin + p[2]*cos
 
@@ -341,60 +338,114 @@ class ADC5g_Calibration_Tools (object):
     #
     # Determines residuals from raw snapshot and fitted sine
     #
-    def get_resid(self, freq, raw):
-    
-        params1,params2 = self.fit_snap(freq, raw)
+    def get_code_errors(self, freq, raw):
 
-        core1 = raw[0::2]
-        core2 = raw[1::2]
+         s = []
+	 c = []
+	 x = []
+	 del_phi = 2*math.pi*freq/self.clk
 
-	del_phi = 2*np.pi*freq/self.clk
+	 for i in range(len(raw)):
 
-	x = [del_phi*i for i in range(len(raw))]
+		 s += [math.sin(del_phi*i)]
+		 c += [math.cos(del_phi*i)]
+		 x += [del_phi*i]
 
-        x1 = x[0::2]
-        x2 = x[1::2]
+	 s1 = s[0::2]
+	 s2 = s[1::2]
+	 c1 = c[0::2]
+	 c2 = c[1::2]
+	 x1 = x[0::2]
+	 x2 = x[1::2]
+         core1 = raw[0::2]
+	 core2 = raw[1::2]
 
-	y1 =  syn_func(x1, params1[0][0], params1[0][1], params1[0][2])
-	y2 =  syn_func(x2, params2[0][0], params2[0][1], params2[0][2])
- 
-        resid1 = y1 - core1
-        resid2 = y2 - core2
-        
-        return resid1, resid2
+	 params1 = curve_fit(syn_func, x1, core1, p0=[120., 90., 90.]) 
+	 params2 = curve_fit(syn_func, x2, core2, p0=[120., 90., 90.]) 
+
+	 args1 = (np.array(s1), np.array(c1), np.array(core1)) 
+	 args2 = (np.array(s2), np.array(c2), np.array(core2))
+
+	 Fit1 = fitsin(params1[0], args1[0], args1[1])
+	 Fit2 = fitsin(params2[0], args2[0], args2[1])
+
+	 code_errors = np.zeros((256,2), dtype='float')
+	 ce_counts = np.zeros((256,2), dtype='int32')
+
+	 for i in range(len(core1)):
+
+		 code1 = core1[i]
+		 code2 = core2[i]
+
+		 code_errors[code1][0] += code1 - Fit1[i]
+		 code_errors[code2][1] += code2 - Fit2[i]
+
+		 ce_counts[code1][0] += 1
+		 ce_counts[code2][1] += 1
+
+	 errors = np.zeros((256,2))
+
+	 for code in range(256):
+
+		 if ce_counts[code][0] != 0:
+
+			 errors[code][0] = code_errors[code][0]/ce_counts[code][0]
+
+		 else:
+
+			 errors[code][0] = 0
+
+		 if ce_counts[code][1] != 0:
+
+			 errors[code][1] = code_errors[code][1]/ce_counts[code][1]
+		 
+		 else:
+
+			 errors[code][1] = 0
+
+	 return errors
 
     #
-    # Determines INL corrections based on residual data
+    # Determines INL corrections based on code error data
     #
-    def convert_residuals_to_inl(self, freq, raw):
+    def fit_inl(self, freq, raw):
          
-         resid1, resid2 = self.get_resid(freq,raw)
+         errors1, errors2 = zip(*self.get_code_errors(freq,raw))
          
-         corrections = np.zeros((17,3), dtype = 'float')
+         corrections = np.zeros((17, 3), dtype = 'float')
+
          wts = array([1.,2.,3.,4.,5.,6.,7.,8.,9.,10.,11.,12.,13.,14.,15.,16.,
                  15.,14.,13.,12.,11.,10.,9.,8.,7.,6.,5.,4.,3.,2.,1.])
-	 start_data = int(resid1[0])
-	 file_limit = len(resid1)
-	 data_limit = start_data+file_limit
+
+	 start_data = 0
+	 file_limit = len(errors1)
+	 data_limit = start_data + file_limit
 
 	 for corr_level in range(17):
+
 		 a = corr_level*16 - 15 - start_data
 		 b = a + 31
+
 		 if a < 0:
 			 a = 0
+
 		 if a == 0 and start_data == 0:
 			 a = 1
+
 		 if b > file_limit:
 			 b = file_limit
+
 		 if b == file_limit and data_limit == 256:
 			 b -= 1
+
 		 if a > b:
 			 continue
+
 		 wt_a = a - corr_level*16 + 15 + start_data
 		 wt_b = wt_a -a + b
 		 wt = sum(wts[wt_a:wt_b])
-		 av1 = sum(resid1[a:b]*wts[wt_a:wt_b])/wt
-		 av2 = sum(resid2[a:b]*wts[wt_a:wt_b])/wt
+		 av1 = sum(errors1[a:b]*wts[wt_a:wt_b])/wt
+		 av2 = sum(errors2[a:b]*wts[wt_a:wt_b])/wt
 		 corrections[corr_level][0] = 16*corr_level
 		 corrections[corr_level][1] = av1
 		 corrections[corr_level][2] = av2
@@ -428,17 +479,19 @@ class ADC5g_Calibration_Tools (object):
 	return multi_inl
     
  
-#    def set_inl(self, fname = 'inl_default.npz'):
+    def set_inl(self, errors):
 
-#        zdok = 0        
+        zdok = 0        
         
-#        df = np.load(fname)
-#	zdok0_inl = df['zdok0_inl']
+        #df = np.load(fname)
+	#zdok0_inl = df['zdok0_inl']
  
-#        adc5g.set_inl_registers(self.roach,zdok,1,zdok0_inl[1])
-#        adc5g.set_inl_registers(self.roach,zdok,2,zdok0_inl[2])
-#        adc5g.set_inl_registers(self.roach,zdok,3,zdok0_inl[3])
-#        adc5g.set_inl_registers(self.roach,zdok,4,zdok0_inl[4])
+	codes, inl_a, inl_b = zip(*errors)
+
+        adc5g.set_inl_registers(self.roach, zdok, 1, inl_a)
+        adc5g.set_inl_registers(self.roach, zdok, 2, inl_b)
+        #adc5g.set_inl_registers(self.roach,zdok,3,zdok0_inl[3])
+        #adc5g.set_inl_registers(self.roach,zdok,4,zdok0_inl[4])
              
         
     #
@@ -467,7 +520,7 @@ class ADC5g_Calibration_Tools (object):
 
         for core in range(1,5):
 
-              adc5g.set_inl(self.roach, zdok, core, 0)
+              adc5g.set_inl_registers(self.roach, zdok, core, np.zeros(17))
 
 	self.roach.progdev(self.bitstream)
         
