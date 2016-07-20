@@ -1,4 +1,4 @@
-from corr import katcp_wrapper
+#from corr import katcp_wrapper
 import adc5g
 from hp8780a import HP8780A
 import time
@@ -10,6 +10,7 @@ from scipy.optimize import curve_fit
 import math
 from matplotlib import pyplot as plt
 from matplotlib import mlab
+from matplotlib.mlab import psd, detrend_mean
 
 #
 # Functions used by the fitting routines
@@ -111,6 +112,9 @@ class ADC5g_Calibration_Tools (object):
         return multiple_ogp
         
     def cal_sinad(self, freq, raw ):
+        """
+        Calculates the sinad from the residuals of the fit. 
+        """
 
         del_phi = 2*math.pi*freq/self.clk
 
@@ -136,6 +140,52 @@ class ADC5g_Calibration_Tools (object):
         sinad = 10.0 * math.log10(pwr_sinad)
         
         return sinad
+        
+    def do_sfdr(self, sig_freq, raw, nfft=1024):
+        """
+        Calculates the sinad and sfdr of the raw data. It first gets the PSD.
+        Then, finds the fundamental peak and the maximum spurrious peak. 
+        (Harmonics are also spurs). The DC level is excluded.
+        """
+        samp_freq=self.clk
+        power, freqs = psd(raw, nfft, Fs=samp_freq*1e6, detrend=detrend_mean, scale_by_freq=True)
+        freqs = freqs/1e6
+        db = 10*np.log10(power)
+        tot_pwr = 0.0
+        in_peak = False
+        spur_pwr = 0.0
+        for i in range(4,len(freqs)):
+            if abs(freqs[i] - sig_freq) < 4:
+              test = -70
+            else:
+              test = -90
+            pwr = 10**(float(db[i])/10.)
+            tot_pwr += pwr
+            if in_peak:
+              if db[i] < test:
+                in_peak = False
+                if abs(peak_freq - sig_freq) < 1:
+                  sig_pwr = pwr_in_peak
+                  sig_db = peak_db
+                  peak_sig_freq = peak_freq
+                else:
+                  if pwr_in_peak > spur_pwr:
+                    spur_pwr = pwr_in_peak
+                    spur_db = peak_db
+                    spur_freq = peak_freq
+              else:
+                pwr_in_peak += pwr
+                if db[i] > peak_db:
+                  peak_db = db[i]
+                  peak_freq = freqs[i]
+            elif db[i] > test:
+              pwr_in_peak = pwr
+              peak_freq = freqs[i]
+              peak_db = db[i]
+              in_peak = True
+        sfdr = 10.0*math.log10(sig_pwr / spur_pwr)
+        sinad = 10.0*math.log10(sig_pwr/(tot_pwr - sig_pwr))
+        return sfdr, sinad
             
     #
     # Returns the current ogp values from an ADC (zdok = 0 or 1) for a list
@@ -183,7 +233,7 @@ class ADC5g_Calibration_Tools (object):
     # using swept input CW tone
     #
 
-    def do_ogp_cw_sweep(self, zdoks=[0], save=False, fname='ogp_default.npz', save_raws=False, raw_fname = 'raw_snaps.npz', sinad= True, raw_len=8192):
+    def do_ogp_cw_sweep(self, zdoks=[0], save=False, fname='ogp_default.npz', save_raws=False, raw_fname = 'raw_snaps.npz', sinad= True, raw_len=8192, sfdr=False):
 
 	syn = HP8780A()
 
@@ -197,6 +247,10 @@ class ADC5g_Calibration_Tools (object):
 	ogpD = {}
 	sinadAB= {}
 	sinadCD= {}
+	sfdrAB = {}
+	sfdrCD = {}
+	sinadAB_psd= {}
+	sinadCD_psd= {}
 
 	rawsAB = np.zeros((len(freqs),raw_len))
 	rawsCD = np.zeros((len(freqs),raw_len))
@@ -225,22 +279,33 @@ class ADC5g_Calibration_Tools (object):
 		if sinad:
 		 sinadAB[freq] = self.cal_sinad(freq, rawAB)
 		 sinadCD[freq] = self.cal_sinad(freq, rawCD)
+   
+		if sfdr:
+		 sfdrAB[freq], sinadAB_psd[freq] = self.do_sfdr(freq,rawAB)
+   		 sfdrCD[freq], sinadCD_psd[freq] = self.do_sfdr(freq,rawCD)
+      
+       
 
 	ogpA_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpA.values())))
         ogpB_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpB.values())))
         ogpC_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpC.values())))
         ogpD_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpD.values())))
         
+        multi_ogp = (ogpA_m,ogpB_m,ogpC_m,ogpD_m)
         
 	if save:		
 		if sinad:
 		 sinadAB_m = tuple(sinadAB)
 		 sinadCD_m = tuple(sinadCD)
-		 multi_ogp = (ogpA_m,ogpB_m,ogpC_m,ogpD_m,sinadAB_m, sinadCD_m)
-		 np.savez(fname, zdok0_ogp = multi_ogp)
-		else:
-		 multi_ogp = (ogpA_m,ogpB_m,ogpC_m,ogpD_m)
-		 np.savez(fname, zdok0_ogp = multi_ogp)
+		 multi_sinad= (sinadAB_m, sinadCD_m)
+		if sfdr:
+		 sfdrAB_m = tuple(sfdrAB)
+		 sfdrCD_m = tuple(sfdrCD)
+		 sinadAB_psd_m = tuple(sinadAB_psd)
+		 sinadCD_psd_m = tuple(sinadCD_psd)
+		 multi_sfdr = (sfdrAB_m, sfdrCD_m, sinadAB_psd_m, sinadCD_psd_m)
+
+		np.savez(fname, zdok0_ogp = multi_ogp, zdok0_sinad=multi_sinad, zdok0_sfdr=multi_sfdr)
        
 
         if save_raws:
