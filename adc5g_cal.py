@@ -95,16 +95,16 @@ class ADC5g_Calibration_Tools (object):
         amp2 = math.sqrt(sin2a**2 + cos2a**2)
         dly2 = d_fact*math.atan2(sin2a, cos2a)
 
-	avz = (z1+z2)/2.0
+        avz = (z1+z2)/2.0
         avamp = (amp1+amp2)/2.0
         a1p = 100*(avamp-amp1)/avamp 
         a2p = 100*(avamp-amp2)/avamp 
         avdly = (dly1+dly2)/2.0
         
         ogp1 = (z1-true_zero, a1p, dly1-avdly)
-	ogp2 = (z2-true_zero, a2p, dly2-avdly)
+        ogp2 = (z2-true_zero, a2p, dly2-avdly)
 
-	multiple_ogp = (ogp1,ogp2)
+        multiple_ogp = (ogp1,ogp2)
 
         return multiple_ogp
         
@@ -151,6 +151,10 @@ class ADC5g_Calibration_Tools (object):
         tot_pwr = 0.0
         in_peak = False
         spur_pwr = 0.0
+        peak_freq = 0.0
+        pwr_in_peak = 0.0
+        peak_db = 0.0
+        
         for i in range(4,len(freqs)):
             if abs(freqs[i] - sig_freq) < 4:
               test = -70
@@ -163,13 +167,13 @@ class ADC5g_Calibration_Tools (object):
                 in_peak = False
                 if abs(peak_freq - sig_freq) < 1:
                   sig_pwr = pwr_in_peak
-                  sig_db = peak_db
-                  peak_sig_freq = peak_freq
+                  #sig_db = peak_db
+                  #peak_sig_freq = peak_freq
                 else:
                   if pwr_in_peak > spur_pwr:
                     spur_pwr = pwr_in_peak
-                    spur_db = peak_db
-                    spur_freq = peak_freq
+                    #spur_db = peak_db
+                    #spur_freq = peak_freq
               else:
                 pwr_in_peak += pwr
                 if db[i] > peak_db:
@@ -183,6 +187,39 @@ class ADC5g_Calibration_Tools (object):
         sfdr = 10.0*math.log10(sig_pwr / spur_pwr)
         sinad = 10.0*math.log10(sig_pwr/(tot_pwr - sig_pwr))
         return sfdr, sinad
+        
+    def do_sfdr_sweep( self, zdok=0, final_freq=400, save=False, fname='sfdr_sinad.npz'):
+        """
+        Calculates the SFDR and SINAD from a sweep in frequency from 50 Mhz to
+        final_freq Mhz. 
+        """
+	#syn = HP8780A()
+	final_freq += 50
+	freqs = np.arange(100,final_freq,50)
+	#zdok = 0
+	sfdrAB = {}
+	sfdrCD = {}
+	sinadAB_psd= {}
+	sinadCD_psd= {}
+
+	for i in range(len(freqs)): # MHz
+
+		freq = freqs[i]
+		self.syn.set_freq(freq*1e6)
+		time.sleep(2.0)
+	
+		rawAB = adc5g.get_snapshot(self.roach, 'scope_raw_a%i_snap' %(zdok))
+		rawCD = adc5g.get_snapshot(self.roach, 'scope_raw_c%i_snap' %(zdok))
+  
+		sfdrAB[freq], sinadAB_psd[freq] = self.do_sfdr(freq,rawAB)
+		sfdrCD[freq], sinadCD_psd[freq] = self.do_sfdr(freq,rawCD)
+        
+	if save:		
+		multi_sfdr = (sfdrAB, sfdrCD)
+		multi_sinad_psd = (sinadAB_psd, sinadCD_psd)
+		np.savez(fname, zdok_sfdr=multi_sfdr, zdok_sinad_psd=multi_sinad_psd)
+
+	return multi_sfdr, multi_sinad_psd
             
     #
     # Returns the current ogp values from an ADC (zdok = 0 or 1) for a list
@@ -283,7 +320,7 @@ class ADC5g_Calibration_Tools (object):
       
        
 
-	ogpA_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpA.values())))
+        ogpA_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpA.values())))
         ogpB_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpB.values())))
         ogpC_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpC.values())))
         ogpD_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpD.values())))
@@ -292,15 +329,15 @@ class ADC5g_Calibration_Tools (object):
         
 	if save:		
 		if sinad:
-		 sinadAB_m = tuple(sinadAB)
-		 sinadCD_m = tuple(sinadCD)
-		 multi_sinad= (sinadAB_m, sinadCD_m)
+		        sinadAB_m = tuple(sinadAB)
+		        sinadCD_m = tuple(sinadCD)
+		        multi_sinad= (sinadAB_m, sinadCD_m)
 		if sfdr:
-		 sfdrAB_m = tuple(sfdrAB)
-		 sfdrCD_m = tuple(sfdrCD)
-		 sinadAB_psd_m = tuple(sinadAB_psd)
-		 sinadCD_psd_m = tuple(sinadCD_psd)
-		 multi_sfdr = (sfdrAB_m, sfdrCD_m, sinadAB_psd_m, sinadCD_psd_m)
+		        sfdrAB_m = tuple(sfdrAB)
+		        sfdrCD_m = tuple(sfdrCD)
+		        sinadAB_psd_m = tuple(sinadAB_psd)
+		        sinadCD_psd_m = tuple(sinadCD_psd)
+		        multi_sfdr = (sfdrAB_m, sfdrCD_m, sinadAB_psd_m, sinadCD_psd_m)
 
 		np.savez(fname, zdok0_ogp = multi_ogp, zdok0_sinad=multi_sinad, zdok0_sfdr=multi_sfdr)
        
@@ -318,9 +355,9 @@ class ADC5g_Calibration_Tools (object):
     def do_ogp_noise_source(self, rpt, save=False, fname='ogp_noise_default.npz'):
 
         ogpA = {}
-	ogpB = {}
-	ogpC = {}
-	ogpD = {}
+        ogpB = {}
+        ogpC = {}
+        ogpD = {}
 
         for i in range(rpt):
 
@@ -330,7 +367,7 @@ class ADC5g_Calibration_Tools (object):
 		ogpA[i], ogpB[i] = self.convert_noise_to_ogp(rawAB)
 		ogpC[i], ogpD[i] = self.convert_noise_to_ogp(rawCD)
 
-	ogpA_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpA.values())))
+        ogpA_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpA.values())))
         ogpB_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpB.values())))
         ogpC_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpC.values())))
         ogpD_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpD.values())))
