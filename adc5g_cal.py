@@ -1,4 +1,4 @@
-#from corr import katcp_wrapper
+from corr import katcp_wrapper
 import adc5g
 from hp8780a import HP8780A
 import time
@@ -30,25 +30,41 @@ def sin_residuals(p, sin, cos, raw):
         return res
 
 #
-# ADC Calibration Tools
+# ADC5g Calibration Tools
 #
+# This class contains functions to calibrate two ASIAA ADC5G samplers, 
+# each configured in 2-channel mode, for a total of 4 signal channels
 # 
+# In this mode, each channel is sampled by two independent adc 'cores'
+# which are interleaved to achieve the desired sample rate 
 #
+# ADCs are denoted zdok0, zdok1 
+# Channels are denoted 0,1 (zdok0) 2,3 (zdok1)
+# Each channel has associated OGPs and INLs for each core
+# Cores are denoted A, B, C, D 
+# (in 2-channel mode, A and B sample together, C and D sample together)
 #
 
 class ADC5g_Calibration_Tools (object):
     
-    def __init__(self, roach, roach_id = '172.30.51.97', clk=1600):
+    def __init__(self, roach_id = '172.30.51.97', 
+		 bitstream = 'adc5g_tim_aleks_test_2015_Oct_14_1208.bof.gz',
+		 clk=1600):
 
         self.roach_id = roach_id
-        self.bitstream = 'adc5g_tim_aleks_test_2015_Oct_14_1208.bof.gz'
+        self.bitstream = bitstream
         self.clk = clk
-	self.roach = roach
 	self.freqs = np.arange(6)*50 + 100.0
 	self.syn = HP8780A()
-	#self.roach = katcp_wrapper.FpgaClient(roach_id)
-	#self.roach.progdev(self.bitstream)
 
+	roach = katcp_wrapper.FpgaClient(roach_id)
+	roach.wait_connected()
+	roach.progdev(self.bitstream)
+	self.roach = roach
+
+    def snap(freq):
+
+	    self.syn.rf_output_on()
     #	
     # Takes a raw snap shot of time domain signal, separates both cores, and finds fitted parameters
     # A,B,offset to linear sine function (y = A*cos(x) + B*sin(x) + offset)
@@ -292,15 +308,12 @@ class ADC5g_Calibration_Tools (object):
         
 	if save:		
 		if sinad:
-		 sinadAB_m = tuple(sinadAB)
-		 sinadCD_m = tuple(sinadCD)
-		 multi_sinad= (sinadAB_m, sinadCD_m)
+
+		 multi_sinad= (sinadAB, sinadCD)
+
 		if sfdr:
-		 sfdrAB_m = tuple(sfdrAB)
-		 sfdrCD_m = tuple(sfdrCD)
-		 sinadAB_psd_m = tuple(sinadAB_psd)
-		 sinadCD_psd_m = tuple(sinadCD_psd)
-		 multi_sfdr = (sfdrAB_m, sfdrCD_m, sinadAB_psd_m, sinadCD_psd_m)
+		 
+		 multi_sfdr = (sfdrAB, sfdrCD, sinadAB_psd, sinadCD_psd)
 
 		np.savez(fname, zdok0_ogp = multi_ogp, zdok0_sinad=multi_sinad, zdok0_sfdr=multi_sfdr)
        
@@ -309,7 +322,7 @@ class ADC5g_Calibration_Tools (object):
 		
 		np.savez(raw_fname, freqs = freqs, rawsAB = rawsAB, rawsCD = rawsCD)
 
-	return multi_ogp
+	return multi_ogp, multi_sinad, multi_sfdr
 
 
     #
