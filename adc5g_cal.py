@@ -64,6 +64,9 @@ class ADC5g_Calibration_Tools (object):
 
     def get_channel_snap_reg(chan):
 
+	    """
+	       Gets the snap register string based on channel No. (0,1,2,3)
+	    """
 	    reg = None
 
 	    if chan == 0:
@@ -79,166 +82,207 @@ class ADC5g_Calibration_Tools (object):
 		    reg = 'scope_raw_c1_snap_bram'
 
 	    return reg
+    
+    def get_channel_core_spi(chan):
+
+        if chan == 0:
+
+                zdok = 0
+                cores = range(1,3)
+
+        if chan == 1:
+
+                zdok = 0
+                cores = range(3,5)
+
+        if chan == 2:
+
+                zdok = 1
+                cores =range(1,3)
+
+        if chan == 3:
+
+                zdok = 1
+                cores =range(3,5)
+
+	return zdok, cores
 		    
     def get_snap(chan, freq): #MHz
 
+	    """
+	       Takes a snap shot on channel 'chan' of a cw tone
+	       of frequency 'freq' (MHz)
+	    """
 	    
 	    self.syn.output_on()
 	    self.syn.set_freq(freq*1e6)
 	    time.sleep(.5)
-	    raw = adc5g.get_snapshot(self.roach, reg)
 
-	    self.snap_buffer = (raw, freq)
+	    reg = self.get_channel_snap_reg(chan)
+	    raw = array(adc5g.get_snapshot(self.roach, reg))
 
 	    return raw, freq
-    #	
-    # Takes a raw snap shot of time domain signal, separates both cores, and finds fitted parameters
-    # A,B,offset to linear sine function (y = A*cos(x) + B*sin(x) + offset)
-    #
-    def fit_snap(self, freq, raw): 
 
-        del_phi = 2*math.pi*freq/self.clk
 
-        x  = [del_phi*i for i in range(len(raw))]
+    def fit_snap(self, raw, freq): 
 
-        core1 = raw[0::2]
-        core2 = raw[1::2]
+	    """
+	       Takes a snap 'raw' of cw frequency 'freq', minimizes least squares
+	       to find best fit parameters for linear sine model
+	    """
 
-        x1 = x[0::2]
-        x2 = x[1::2]
+	    del_phi = 2*math.pi*freq/self.clk
+
+	    x  = [del_phi*i for i in range(len(raw))]
+
+	    core1 = raw[0::2]
+	    core2 = raw[1::2]
+
+	    x1 = x[0::2]
+	    x2 = x[1::2]
         
-        p0 = [128.,90.,90.]
+	    p0 = [128.,90.,90.]
                 
-        params1 = curve_fit(syn_func, x1, core1, p0)
+	    params1 = curve_fit(syn_func, x1, core1, p0)
 
-        params2 = curve_fit(syn_func, x2, core2, p0)
+	    params2 = curve_fit(syn_func, x2, core2, p0)
     
-        return params1,params2
+	    return params1, params2
     
-    #
-    # Takes fitted parameters from a linear sine model and determines
-    # values for offset, gain and phase corrections on ADC
-    #
-    def convert_fit_to_ogp(self, freq, params1, params2):
 
-        z_fact = -500.0/256.0
-        true_zero = 0.0 * z_fact
-        d_fact = 1e12/(2*np.pi*freq*1e6)
-        
-        z1 = z_fact * params1[0][0]
-        sin1a = params1[0][1]
-        cos1a = params1[0][2]
-        amp1 = math.sqrt(sin1a**2 + cos1a**2)
-        dly1 = d_fact*math.atan2(sin1a, cos1a)
-	
-        z2 = z_fact * params2[0][0]
-        sin2a = params2[0][1]
-        cos2a = params2[0][2]
-        amp2 = math.sqrt(sin2a**2 + cos2a**2)
-        dly2 = d_fact*math.atan2(sin2a, cos2a)
+    def calc_ogp(self, params1, params2, freq):
 
-        avz = (z1+z2)/2.0
-        avamp = (amp1+amp2)/2.0
-        a1p = 100*(avamp-amp1)/avamp 
-        a2p = 100*(avamp-amp2)/avamp 
-        avdly = (dly1+dly2)/2.0
-        
-        ogp1 = (z1-true_zero, a1p, dly1-avdly)
-        ogp2 = (z2-true_zero, a2p, dly2-avdly)
+	    """
+	       Calculates OGP values for both cores given best fit parameters
+	       from a snap fit
+	    """
 
-        multiple_ogp = (ogp1,ogp2)
+	    z_fact = -500.0/256.0
+	    true_zero = 0.0 * z_fact
+	    d_fact = 1e12/(2*np.pi*freq*1e6)
 
-        return multiple_ogp
-        
-    def cal_sinad(self, freq, raw ):
-        """
-        Calculates the sinad from the residuals of the fit. 
-        """
+	    z1 = z_fact * params1[0][0]
+	    sin1a = params1[0][1]
+	    cos1a = params1[0][2]
+	    amp1 = math.sqrt(sin1a**2 + cos1a**2)
+	    dly1 = d_fact*math.atan2(sin1a, cos1a)
 
-        del_phi = 2*math.pi*freq/self.clk
+	    z2 = z_fact * params2[0][0]
+	    sin2a = params2[0][1]
+	    cos2a = params2[0][2]
+	    amp2 = math.sqrt(sin2a**2 + cos2a**2)
+	    dly2 = d_fact*math.atan2(sin2a, cos2a)
 
-        x  = [del_phi*i for i in range(len(raw))]
-        p0 = [128.,90.,90.]
+	    avz = (z1+z2)/2.0
+	    avamp = (amp1+amp2)/2.0
+	    a1p = 100*(avamp-amp1)/avamp 
+	    a2p = 100*(avamp-amp2)/avamp 
+	    avdly = (dly1+dly2)/2.0
+
+	    ogp1 = (z1-true_zero, a1p, dly1-avdly)
+	    ogp2 = (z2-true_zero, a2p, dly2-avdly)
+
+	    return ogp1, ogp2
         
-        params0 = curve_fit(syn_func, x , raw  , p0)
+    def calc_sinad(self, raw, freq):
+
+	    """
+	    Calculates the SINAD from the residuals of the fit. 
+	    """
+
+	    del_phi = 2*math.pi*freq/self.clk
+
+	    x  = [del_phi*i for i in range(len(raw))]
+	    p0 = [128.,90.,90.]
         
-        #z_fact = -500.0/256.0
-        #d_fact = 1e12/(2*np.pi*freq*1e6)
-        #z0 = z_fact * params0[0][0]
-        off = params0[0][0]
-        sin0a = params0[0][1]
-        cos0a = params0[0][2]
-        amp0 = math.sqrt(sin0a**2 + cos0a**2)
-        #dly0 = d_fact*math.atan2(sin0a, cos0a)
-        fit0 = syn_func(x, off, sin0a, cos0a)
-        ssq0 = 0.0
-        data_cnt = len(raw)
-        for i in range (data_cnt):
-            ssq0 += (raw[i]-fit0[i])**2
-        pwr_sinad = (amp0**2) / (2*ssq0/data_cnt)
-        sinad = 10.0 * math.log10(pwr_sinad)
+	    params0 = curve_fit(syn_func, x , raw  , p0)
+
+	    off = params0[0][0]
+	    sin0a = params0[0][1]
+	    cos0a = params0[0][2]
+	    amp0 = math.sqrt(sin0a**2 + cos0a**2)
+       
+	    fit0 = syn_func(x, off, sin0a, cos0a)
+	    ssq0 = 0.0
+	    data_cnt = len(raw)
+
+	    for i in range (data_cnt):
+		    ssq0 += (raw[i]-fit0[i])**2
+
+	    pwr_sinad = (amp0**2) / (2*ssq0/data_cnt)
+	    sinad = 10.0 * math.log10(pwr_sinad)
         
-        return sinad
+	    return sinad
         
-    def do_sfdr(self, sig_freq, raw, nfft=1024):
-        """
-        Calculates the sinad and sfdr of the raw data. It first gets the PSD.
-        Then, finds the fundamental peak and the maximum spurrious peak. 
-        (Harmonics are also spurs). The DC level is excluded.
-        """
-        samp_freq=self.clk
-        power, freqs = psd(raw, nfft, Fs=samp_freq*1e6, detrend=detrend_mean, scale_by_freq=True)
-        freqs = freqs/1e6
-        db = 10*np.log10(power)
-        tot_pwr = 0.0
-        in_peak = False
-        spur_pwr = 0.0
-        peak_freq = 0.0
-        pwr_in_peak = 0.0
-        peak_db = 0.0
+    def do_sfdr(self, raw, freq, nfft=1024):
+
+	    """
+	    Calculates the sinad and sfdr of the raw data. It first gets the PSD.
+	    Then, finds the fundamental peak and the maximum spurious peak. 
+	    (Harmonics are also spurs). The DC level is excluded.
+	    """
+
+	    samp_freq=self.clk
+	    power, freqs = psd(raw, nfft, Fs=samp_freq*1e6, 
+			       detrend=detrend_mean, scale_by_freq=True)
+	    freqs = freqs/1e6
+	    db = 10*np.log10(power)
+	    tot_pwr = 0.0
+	    in_peak = False
+	    spur_pwr = 0.0
+	    peak_freq = 0.0
+	    pwr_in_peak = 0.0
+	    peak_db = 0.0
         
-        for i in range(4,len(freqs)):
-            if abs(freqs[i] - sig_freq) < 4:
-              test = -70
-            else:
-              test = -90
-            pwr = 10**(float(db[i])/10.)
-            tot_pwr += pwr
-            if in_peak:
-              if db[i] < test:
-                in_peak = False
-                if abs(peak_freq - sig_freq) < 1:
-                  sig_pwr = pwr_in_peak
-                  #sig_db = peak_db
-                  #peak_sig_freq = peak_freq
-                else:
-                  if pwr_in_peak > spur_pwr:
-                    spur_pwr = pwr_in_peak
-                    #spur_db = peak_db
-                    #spur_freq = peak_freq
-              else:
-                pwr_in_peak += pwr
-                if db[i] > peak_db:
-                  peak_db = db[i]
-                  peak_freq = freqs[i]
-            elif db[i] > test:
-              pwr_in_peak = pwr
-              peak_freq = freqs[i]
-              peak_db = db[i]
-              in_peak = True
-        sfdr = 10.0*math.log10(sig_pwr / spur_pwr)
-        sinad = 10.0*math.log10(sig_pwr/(tot_pwr - sig_pwr))
-        return sfdr, sinad
+	    for i in range(4,len(freqs)):
+
+		    if abs(freqs[i] - sig_freq) < 4:
+			    test = -70
+		    else:
+			    test = -90
+
+		    pwr = 10**(float(db[i])/10.)
+		    tot_pwr += pwr
+
+		    if in_peak:
+
+			    if db[i] < test:
+				    in_peak = False
+
+				    if abs(peak_freq - sig_freq) < 1:
+					    sig_pwr = pwr_in_peak
+				    else:
+					    if pwr_in_peak > spur_pwr:
+						    spur_pwr = pwr_in_peak
+	    
+
+			    else:
+				    pwr_in_peak += pwr
+				    if db[i] > peak_db:
+					    peak_db = db[i]
+					    peak_freq = freqs[i]
+		    elif db[i] > test:
+
+			    pwr_in_peak = pwr
+			    peak_freq = freqs[i]
+			    peak_db = db[i]
+			    in_peak = True
+
+	    sfdr = 10.0*math.log10(sig_pwr / spur_pwr)
+	    sinad = 10.0*math.log10(sig_pwr/(tot_pwr - sig_pwr))
+	    return sfdr, sinad
         
-    def do_sfdr_sweep( self, zdok=0, final_freq=400, save=False, fname='sfdr_sinad.npz'):
+    def do_sfdr_sinad_cw_sweep( self, zdok=0, final_freq=400, save=False, 
+		       fname='sfdr_sinad.npz'):
+
         """
         Calculates the SFDR and SINAD from a sweep in frequency from 50 Mhz to
         final_freq Mhz. 
         """
-	#syn = HP8780A()
+
 	final_freq += 50
 	freqs = np.arange(100,final_freq,50)
-	#zdok = 0
+
 	sfdrAB = {}
 	sfdrCD = {}
 	sinadAB_psd= {}
@@ -250,6 +294,8 @@ class ADC5g_Calibration_Tools (object):
 		self.syn.set_freq(freq*1e6)
 		time.sleep(2.0)
 	
+		for chan in chans:
+
 		rawAB = adc5g.get_snapshot(self.roach, 'scope_raw_a%i_snap' %(zdok))
 		rawCD = adc5g.get_snapshot(self.roach, 'scope_raw_c%i_snap' %(zdok))
   
@@ -263,13 +309,17 @@ class ADC5g_Calibration_Tools (object):
 
 	return multi_sfdr, multi_sinad_psd
             
-    #
-    # Returns the current ogp values from an ADC (zdok = 0 or 1) for a list
-    # of cores (cores = [1,2,3,4])
-    #
-    def get_ogp(self, zdok = 0, cores = [1,2,3,4]):
-        
+
+
+    def get_ogp(self, chan):
+
+        """
+	   Returns ogp values for a channel 'chan'
+	"""
+
         multi_ogp = []
+    
+	zdok, cores = self.get_channel_cores_spi(chan)
 
         for core in cores:
 
@@ -277,18 +327,20 @@ class ADC5g_Calibration_Tools (object):
             gain = adc5g.get_spi_gain(self.roach, zdok, core)
             phase = adc5g.get_spi_phase(self.roach, zdok, core)
             ogp_core = [off, gain, phase]
+
             multi_ogp.append(ogp_core)
 
         return multi_ogp
 
-    #
-    # Sets ogp values contained in 'multi_ogp' array for each core in 'cores'
-    # on specified ADC ('zdok')
-    #
-    def set_ogp(self, multi_ogp, zdok, cores=[1,2,3,4]):
+    def set_ogp(self, multi_ogp, chan):
 
-        adc5g.set_spi_control(self.roach, zdok)
-        
+        """
+	   Sets ogp for two cores of channel 'chan'
+	   multi_ogp is format (ogp1, ogp2)
+	"""
+
+        zdok, cores = self.get_channel_cores_spi(chan)
+
         for core in cores:
             
             off, gain, phase = multi_ogp[core-1]
@@ -304,18 +356,13 @@ class ADC5g_Calibration_Tools (object):
 
 	self.roach.progdev(self.bitstream)
 
-    #
-    # Generates frequency averaged ogp values derived from sine fit for each core
-    # using swept input CW tone
-    #
 
-    def do_ogp_cw_sweep(self, zdoks=[0], save=False, fname='ogp_default.npz', save_raws=False, raw_fname = 'raw_snaps.npz', sinad= True, raw_len=8192, sfdr=False):
-
-	syn = HP8780A()
+    def do_ogp_cw_sweep(self, chan, set=True, 
+			save=False, fname='ogp_default.npz', 
+			save_raws=False, raw_fname = 'raw_snaps.npz', 
+			raw_len=8192, sinad=True, sfdr=False):
 
 	freqs = self.freqs
-
-	zdok = 0
 
 	ogpA = {}
 	ogpB = {}
@@ -328,30 +375,24 @@ class ADC5g_Calibration_Tools (object):
 	sinadAB_psd= {}
 	sinadCD_psd= {}
 
-	rawsAB = np.zeros((len(freqs),raw_len))
-	rawsCD = np.zeros((len(freqs),raw_len))
-
+	#rawsAB = np.zeros((len(freqs),raw_len))
+	#rawsCD = np.zeros((len(freqs),raw_len))
 	
 
 	for i in range(len(freqs)): # MHz
 
 		freq = freqs[i]
-		self.syn.set_freq(freq*1e6)
-		time.sleep(2.0)
-	
-		rawAB = adc5g.get_snapshot(self.roach, 'scope_raw_a%i_snap' %(zdok))
-		rawCD = adc5g.get_snapshot(self.roach, 'scope_raw_c%i_snap' %(zdok))  
+ 
+		raw, f = self.get_snap(chan, freq) 
+		
+		#rawsAB[i] = rawAB
+		#rawsCD[i] = rawCD
 
-		rawsAB[i] = rawAB
-		rawsCD[i] = rawCD
-
-		paramsA, paramsB = self.fit_snap(freq, rawAB)
-		paramsC, paramsD = self.fit_snap(freq, rawCD)
+		params1, params2 = self.fit_snap(freq, raw)
   
-		ogpA[freq], ogpB[freq] = self.convert_fit_to_ogp(freq, 
+		ogp1[freq], ogp2[freq] = self.convert_fit_to_ogp(freq, 
 								 paramsA, paramsB)
-		ogpC[freq], ogpD[freq] = self.convert_fit_to_ogp(freq, 
-								 paramsC, paramsD)
+		
 		if sinad:
 		 sinadAB[freq] = self.cal_sinad(freq, rawAB)
 		 sinadCD[freq] = self.cal_sinad(freq, rawCD)
