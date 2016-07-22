@@ -63,7 +63,6 @@ class ADC5g_Calibration_Tools (object):
 	    self.roach = roach
 
     def get_channel_snap_reg(chan):
-
 	    """
 	       Gets the snap register string based on channel No. (0,1,2,3)
 	    """
@@ -82,33 +81,29 @@ class ADC5g_Calibration_Tools (object):
 		    reg = 'scope_raw_c1_snap_bram'
 
 	    return reg
+     
     
     def get_channel_core_spi(chan):
 
         if chan == 0:
-
                 zdok = 0
                 cores = range(1,3)
 
         if chan == 1:
-
                 zdok = 0
                 cores = range(3,5)
 
         if chan == 2:
-
                 zdok = 1
                 cores =range(1,3)
 
         if chan == 3:
-
                 zdok = 1
                 cores =range(3,5)
 
-	return zdok, cores
+        return zdok, cores
 		    
     def get_snap(chan, freq): #MHz
-
 	    """
 	       Takes a snap shot on channel 'chan' of a cw tone
 	       of frequency 'freq' (MHz)
@@ -253,8 +248,7 @@ class ADC5g_Calibration_Tools (object):
 					    sig_pwr = pwr_in_peak
 				    else:
 					    if pwr_in_peak > spur_pwr:
-						    spur_pwr = pwr_in_peak
-	    
+						    spur_pwr = pwr_in_peak	    
 
 			    else:
 				    pwr_in_peak += pwr
@@ -272,7 +266,7 @@ class ADC5g_Calibration_Tools (object):
 	    sinad = 10.0*math.log10(sig_pwr/(tot_pwr - sig_pwr))
 	    return sfdr, sinad
         
-    def do_sfdr_sinad_cw_sweep( self, zdok=0, final_freq=400, save=False, 
+    def do_sfdr_sinad_cw_sweep( self, zdok=0, save=False, 
 		       fname='sfdr_sinad.npz'):
 
         """
@@ -280,8 +274,14 @@ class ADC5g_Calibration_Tools (object):
         final_freq Mhz. 
         """
 
-	final_freq += 50
-	freqs = np.arange(100,final_freq,50)
+	final_freq = self.clk /2
+	freqs = np.linspace(50,final_freq,16)
+ 
+     #When freq is 400Mhz, it has no spurrious frequency with clk=1600. SFDR 
+     #can't be calculated in this case. 
+	if 400 in freqs:
+	     x=np.where(freqs==400)
+	     freqs[x[0][0]]=401
 
 	sfdrAB = {}
 	sfdrCD = {}
@@ -294,21 +294,51 @@ class ADC5g_Calibration_Tools (object):
 		self.syn.set_freq(freq*1e6)
 		time.sleep(2.0)
 	
-		for chan in chans:
-
 		rawAB = adc5g.get_snapshot(self.roach, 'scope_raw_a%i_snap' %(zdok))
 		rawCD = adc5g.get_snapshot(self.roach, 'scope_raw_c%i_snap' %(zdok))
   
 		sfdrAB[freq], sinadAB_psd[freq] = self.do_sfdr(freq,rawAB)
 		sfdrCD[freq], sinadCD_psd[freq] = self.do_sfdr(freq,rawCD)
+  
+  		multi_sfdr = (sfdrAB, sfdrCD)
+		multi_sinad_psd = (sinadAB_psd, sinadCD_psd)
         
 	if save:		
-		multi_sfdr = (sfdrAB, sfdrCD)
-		multi_sinad_psd = (sinadAB_psd, sinadCD_psd)
 		np.savez(fname, zdok_sfdr=multi_sfdr, zdok_sinad_psd=multi_sinad_psd)
 
 	return multi_sfdr, multi_sinad_psd
+
+
+    def do_sinad_cw_sweep( self, zdok=0, save=False, fname='sinad.npz'):
+
+        """
+        Calculates the SINAD from a sweep in frequency from 50 Mhz to
+        final_freq Mhz. 
+        """
+
+        final_freq = self.clk /2
+        freqs = np.linspace(50,final_freq,16)     
+        sinadAB= {}
+        sinadCD= {}
+    
+        for i in range(len(freqs)): # MHz
+    
+    		freq = freqs[i]
+    		self.syn.set_freq(freq*1e6)
+    		time.sleep(2.0)
+    	
+    		rawAB = adc5g.get_snapshot(self.roach, 'scope_raw_a%i_snap' %(zdok))
+    		rawCD = adc5g.get_snapshot(self.roach, 'scope_raw_c%i_snap' %(zdok))
+      
+    		sinadAB[freq] = self.calc_sinad(freq,rawAB)
+    		sinadCD[freq] = self.calc_sinad(freq,rawCD)
+      
+    		multi_sinad = (sinadAB, sinadCD)
             
+        if save:		
+    		np.savez(fname, zdok_sinad=multi_sinad)
+    
+        return multi_sinad     
 
 
     def get_ogp(self, chan):
@@ -319,7 +349,7 @@ class ADC5g_Calibration_Tools (object):
 
         multi_ogp = []
     
-	zdok, cores = self.get_channel_cores_spi(chan)
+        zdok, cores = self.get_channel_cores_spi(chan)
 
         for core in cores:
 
@@ -337,7 +367,7 @@ class ADC5g_Calibration_Tools (object):
         """
 	   Sets ogp for two cores of channel 'chan'
 	   multi_ogp is format (ogp1, ogp2)
-	"""
+        """
 
         zdok, cores = self.get_channel_cores_spi(chan)
 
@@ -354,7 +384,7 @@ class ADC5g_Calibration_Tools (object):
             phase_spi = math.floor(.5 + phase*255/28.) + 0x80
             adc5g.set_spi_phase(self.roach, zdok, core, float(phase)*0.65)
 
-	self.roach.progdev(self.bitstream)
+        self.roach.progdev(self.bitstream)
 
 
     def do_ogp_cw_sweep(self, chan, set=True, 
@@ -368,12 +398,6 @@ class ADC5g_Calibration_Tools (object):
 	ogpB = {}
 	ogpC = {}
 	ogpD = {}
-	sinadAB= {}
-	sinadCD= {}
-	sfdrAB = {}
-	sfdrCD = {}
-	sinadAB_psd= {}
-	sinadCD_psd= {}
 
 	#rawsAB = np.zeros((len(freqs),raw_len))
 	#rawsCD = np.zeros((len(freqs),raw_len))
@@ -393,37 +417,17 @@ class ADC5g_Calibration_Tools (object):
 		ogp1[freq], ogp2[freq] = self.convert_fit_to_ogp(freq, 
 								 paramsA, paramsB)
 		
-		if sinad:
-		 sinadAB[freq] = self.cal_sinad(freq, rawAB)
-		 sinadCD[freq] = self.cal_sinad(freq, rawCD)
-   
-		if sfdr:
-		 sfdrAB[freq], sinadAB_psd[freq] = self.do_sfdr(freq,rawAB)
-   		 sfdrCD[freq], sinadCD_psd[freq] = self.do_sfdr(freq,rawCD)
-      
-       
-
         ogpA_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpA.values())))
         ogpB_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpB.values())))
         ogpC_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpC.values())))
         ogpD_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpD.values())))
         
-        multi_ogp = (ogpA_m,ogpB_m,ogpC_m,ogpD_m)
+        multi_ogp = (ogpA_m,ogpB_m,ogpC_m,ogpD_m)        
         
-	if save:		
-		if sinad:
+        if save:		
+		np.savez(fname, zdok0_ogp = multi_ogp)       
 
-		 multi_sinad= (sinadAB, sinadCD)
-
-		if sfdr:
-		 
-		 multi_sfdr = (sfdrAB, sfdrCD, sinadAB_psd, sinadCD_psd)
-
-		np.savez(fname, zdok0_ogp = multi_ogp, zdok0_sinad=multi_sinad, zdok0_sfdr=multi_sfdr)
-       
-
-        if save_raws:
-		
+        if save_raws:		
 		np.savez(raw_fname, freqs = freqs, rawsAB = rawsAB, rawsCD = rawsCD)
 
 	return multi_ogp, multi_sinad, multi_sfdr
@@ -721,7 +725,7 @@ class ADC5g_Calibration_Tools (object):
 
               adc5g.set_inl_registers(self.roach, zdok, core, np.zeros(17))
 
-	self.roach.progdev(self.bitstream)
+        self.roach.progdev(self.bitstream)
         
     
     def save_raw_npz(self, raw, freq, chan):
@@ -805,7 +809,7 @@ class ADC5g_Calibration_Tools (object):
 	    raw_c = adc5g.get_snapshot(self.roach, 'scope_raw_a0_snap')
 	    params_c = curve_fit(syn_func, x, raw_c, p0)
 
-            f_u =  syn_func(r, params_u[0][0], params_u[0][1], params_u[0][2])
+	    f_u =  syn_func(r, params_u[0][0], params_u[0][1], params_u[0][2])
 	    f_c =  syn_func(r, params_c[0][0], params_c[0][1], params_c[0][2])
 
 	    fig = plt.figure()
@@ -832,45 +836,3 @@ class ADC5g_Calibration_Tools (object):
     #
     #roach = katcp_wrapper.FpgaClient('172,30.51.97')
     #roach.progdev('adc5g_tim_aleks_test_2015_Oct_14_1208.bof.gz')
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
-    
-
-
-
-
-	
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
