@@ -375,10 +375,6 @@ class ADC5g_Calibration_Tools (object):
 	sinadAB_psd= {}
 	sinadCD_psd= {}
 
-	#rawsAB = np.zeros((len(freqs),raw_len))
-	#rawsCD = np.zeros((len(freqs),raw_len))
-	
-
 	for i in range(len(freqs)): # MHz
 
 		freq = freqs[i]
