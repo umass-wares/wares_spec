@@ -1,3 +1,4 @@
+
 from corr import katcp_wrapper
 import adc5g
 from hp8780a import HP8780A
@@ -62,28 +63,34 @@ class ADC5g_Calibration_Tools (object):
 	    roach.progdev(self.bitstream)
 	    self.roach = roach
 
-    def get_channel_snap_reg(chan):
-	    """
-	       Gets the snap register string based on channel No. (0,1,2,3)
-	    """
-	    reg = None
+    def get_channel_snap_reg(self, chan):
 
-	    if chan == 0:
-		    reg = 'scope_raw_a0_snap_bram'
-
-	    if chan == 1:
-		    reg = 'scope_raw_c0_snap_bram'
-
-	    if chan == 2:
-		    reg = 'scope_raw_a1_snap_bram'
+         """
+	    Gets the snap register string based on channel No. (0,1,2,3)
+	 """
 	    
-	    if chan == 3:
-		    reg = 'scope_raw_c1_snap_bram'
+	 reg = None
 
-	    return reg
+	 if chan == 0:
+		 reg = 'scope_raw_a0_snap'
+
+	 if chan == 1:
+		 reg = 'scope_raw_c0_snap'
+
+	 if chan == 2:
+		 reg = 'scope_raw_a1_snap'
+	    
+	 if chan == 3:
+		 reg = 'scope_raw_c1_snap'
+
+	 return reg
      
     
-    def get_channel_core_spi(chan):
+    def get_channel_core_spi(self, chan):
+
+        """
+	   Gets the spi parameters based on channel No. (0,1,2,3)
+	"""
 
         if chan == 0:
                 zdok = 0
@@ -102,112 +109,114 @@ class ADC5g_Calibration_Tools (object):
                 cores =range(3,5)
 
         return zdok, cores
+
 		    
-    def get_snap(chan, freq): #MHz
-	    """
-	       Takes a snap shot on channel 'chan' of a cw tone
-	       of frequency 'freq' (MHz)
-	    """
+    def get_snap(self, chan, freq): #MHz
+
+        """
+	   Takes a snap shot on channel 'chan' of a cw tone
+	   of frequency 'freq' (MHz)
+	"""
 	    
-	    self.syn.output_on()
-	    self.syn.set_freq(freq*1e6)
-	    time.sleep(.5)
+	self.syn.output_on()
+	self.syn.set_freq(freq*1e6)
+	time.sleep(.5)
 
-	    reg = self.get_channel_snap_reg(chan)
-	    raw = array(adc5g.get_snapshot(self.roach, reg))
+	reg = self.get_channel_snap_reg(chan)
+	raw = array(adc5g.get_snapshot(self.roach, reg))
 
-	    return raw, freq
+	return raw, freq
 
 
     def fit_snap(self, raw, freq): 
 
-	    """
-	       Takes a snap 'raw' of cw frequency 'freq', minimizes least squares
-	       to find best fit parameters for linear sine model
-	    """
+        """
+	   Takes a snap 'raw' of cw frequency 'freq', minimizes least squares
+	   to find best fit parameters for linear sine model
+	"""
 
-	    del_phi = 2*math.pi*freq/self.clk
+	del_phi = 2*math.pi*freq/self.clk
 
-	    x  = [del_phi*i for i in range(len(raw))]
+	x  = [del_phi*i for i in range(len(raw))]
 
-	    core1 = raw[0::2]
-	    core2 = raw[1::2]
+	core1 = raw[0::2]
+	core2 = raw[1::2]
 
-	    x1 = x[0::2]
-	    x2 = x[1::2]
+	x1 = x[0::2]
+	x2 = x[1::2]
         
-	    p0 = [128.,90.,90.]
+	p0 = [128.,90.,90.]
                 
-	    params1 = curve_fit(syn_func, x1, core1, p0)
+	params1 = curve_fit(syn_func, x1, core1, p0)
 
-	    params2 = curve_fit(syn_func, x2, core2, p0)
+	params2 = curve_fit(syn_func, x2, core2, p0)
     
-	    return params1, params2
+	return params1, params2
     
 
     def calc_ogp(self, params1, params2, freq):
 
-	    """
-	       Calculates OGP values for both cores given best fit parameters
-	       from a snap fit
-	    """
+        """
+	   Calculates OGP values for both cores given best fit parameters
+	   from a snap fit
+	"""
 
-	    z_fact = -500.0/256.0
-	    true_zero = 0.0 * z_fact
-	    d_fact = 1e12/(2*np.pi*freq*1e6)
+	z_fact = -500.0/256.0
+	true_zero = 0.0 * z_fact
+	d_fact = 1e12/(2*np.pi*freq*1e6)
 
-	    z1 = z_fact * params1[0][0]
-	    sin1a = params1[0][1]
-	    cos1a = params1[0][2]
-	    amp1 = math.sqrt(sin1a**2 + cos1a**2)
-	    dly1 = d_fact*math.atan2(sin1a, cos1a)
+	z1 = z_fact * params1[0][0]
+	sin1a = params1[0][1]
+	cos1a = params1[0][2]
+	amp1 = math.sqrt(sin1a**2 + cos1a**2)
+	dly1 = d_fact*math.atan2(sin1a, cos1a)
 
-	    z2 = z_fact * params2[0][0]
-	    sin2a = params2[0][1]
-	    cos2a = params2[0][2]
-	    amp2 = math.sqrt(sin2a**2 + cos2a**2)
-	    dly2 = d_fact*math.atan2(sin2a, cos2a)
+	z2 = z_fact * params2[0][0]
+	sin2a = params2[0][1]
+	cos2a = params2[0][2]
+	amp2 = math.sqrt(sin2a**2 + cos2a**2)
+	dly2 = d_fact*math.atan2(sin2a, cos2a)
 
-	    avz = (z1+z2)/2.0
-	    avamp = (amp1+amp2)/2.0
-	    a1p = 100*(avamp-amp1)/avamp 
-	    a2p = 100*(avamp-amp2)/avamp 
-	    avdly = (dly1+dly2)/2.0
+	avz = (z1+z2)/2.0
+	avamp = (amp1+amp2)/2.0
+	a1p = 100*(avamp-amp1)/avamp 
+	a2p = 100*(avamp-amp2)/avamp 
+	avdly = (dly1+dly2)/2.0
 
-	    ogp1 = (z1-true_zero, a1p, dly1-avdly)
-	    ogp2 = (z2-true_zero, a2p, dly2-avdly)
+	ogp1 = (z1-true_zero, a1p, dly1-avdly)
+	ogp2 = (z2-true_zero, a2p, dly2-avdly)
 
-	    return ogp1, ogp2
+	return ogp1, ogp2
         
     def calc_sinad(self, raw, freq):
 
-	    """
+        """
 	    Calculates the SINAD from the residuals of the fit. 
-	    """
+	"""
 
-	    del_phi = 2*math.pi*freq/self.clk
+	del_phi = 2*math.pi*freq/self.clk
 
-	    x  = [del_phi*i for i in range(len(raw))]
-	    p0 = [128.,90.,90.]
+	x  = [del_phi*i for i in range(len(raw))]
+	p0 = [128.,90.,90.]
         
-	    params0 = curve_fit(syn_func, x , raw  , p0)
+	params0 = curve_fit(syn_func, x , raw  , p0)
 
-	    off = params0[0][0]
-	    sin0a = params0[0][1]
-	    cos0a = params0[0][2]
-	    amp0 = math.sqrt(sin0a**2 + cos0a**2)
+	off = params0[0][0]
+	sin0a = params0[0][1]
+	cos0a = params0[0][2]
+	amp0 = math.sqrt(sin0a**2 + cos0a**2)
        
-	    fit0 = syn_func(x, off, sin0a, cos0a)
-	    ssq0 = 0.0
-	    data_cnt = len(raw)
+	fit0 = syn_func(x, off, sin0a, cos0a)
+	ssq0 = 0.0
+	data_cnt = len(raw)
 
-	    for i in range (data_cnt):
-		    ssq0 += (raw[i]-fit0[i])**2
+	for i in range (data_cnt):
+		ssq0 += (raw[i]-fit0[i])**2
 
-	    pwr_sinad = (amp0**2) / (2*ssq0/data_cnt)
-	    sinad = 10.0 * math.log10(pwr_sinad)
+	pwr_sinad = (amp0**2) / (2*ssq0/data_cnt)
+	sinad = 10.0 * math.log10(pwr_sinad)
         
-	    return sinad
+	return sinad
         
     def do_sfdr(self, raw, freq, nfft=1024):
 
@@ -266,8 +275,7 @@ class ADC5g_Calibration_Tools (object):
 	    sinad = 10.0*math.log10(sig_pwr/(tot_pwr - sig_pwr))
 	    return sfdr, sinad
         
-    def do_sfdr_sinad_cw_sweep( self, zdok=0, save=False, 
-		       fname='sfdr_sinad.npz'):
+    def do_sfdr_sinad_cw_sweep( self, zdok=0, save=False, fname='sfdr_sinad.npz'):
 
         """
         Calculates the SFDR and SINAD from a sweep in frequency from 50 Mhz to
@@ -347,9 +355,9 @@ class ADC5g_Calibration_Tools (object):
 	   Returns ogp values for a channel 'chan'
 	"""
 
-        multi_ogp = []
+        ogp_chan = []
     
-        zdok, cores = self.get_channel_cores_spi(chan)
+        zdok, cores = self.get_channel_core_spi(chan)
 
         for core in cores:
 
@@ -358,22 +366,23 @@ class ADC5g_Calibration_Tools (object):
             phase = adc5g.get_spi_phase(self.roach, zdok, core)
             ogp_core = [off, gain, phase]
 
-            multi_ogp.append(ogp_core)
+            ogp_chan.append(ogp_core)
 
-        return multi_ogp
+        return ogp_chan
 
-    def set_ogp(self, multi_ogp, chan):
+    def set_ogp(self, ogp_chan, chan):
 
         """
 	   Sets ogp for two cores of channel 'chan'
 	   multi_ogp is format (ogp1, ogp2)
         """
 
-        zdok, cores = self.get_channel_cores_spi(chan)
+        zdok, cores = self.get_channel_core_spi(chan)
 
+	i = 0
         for core in cores:
             
-            off, gain, phase = multi_ogp[core-1]
+            off, gain, phase = ogp_chan[i]
 
             off_spi = math.floor(.5 + off*255/100.) + 0x80
             adc5g.set_spi_offset(self.roach, zdok, core, float(off))
@@ -384,49 +393,61 @@ class ADC5g_Calibration_Tools (object):
             phase_spi = math.floor(.5 + phase*255/28.) + 0x80
             adc5g.set_spi_phase(self.roach, zdok, core, float(phase)*0.65)
 
+	    i += 1
+
         self.roach.progdev(self.bitstream)
 
 
-    def do_ogp_cw_sweep(self, chan, set=True, 
-			save=False, fname='ogp_default.npz', 
-			save_raws=False, raw_fname = 'raw_snaps.npz', 
-			raw_len=8192, sinad=True, sfdr=False):
+    def do_ogp_cw_sweep(self, chans = [0,1,2,3], set_ogp=True, 
+			save=False, fname='ogp_default.npz'):
+
+        """
+	   Generates frequency averaged set of ogp for channels in 'chans'
+	   Can save to .npz file and/or set generated OGP values
+	   
+	"""
 
 	freqs = self.freqs
 
-	ogpA = {}
-	ogpB = {}
-	ogpC = {}
-	ogpD = {}
+	multi_ogp = []
 
-	for i in range(len(freqs)): # MHz
+	for chan in chans:
 
-		freq = freqs[i]
+		ogp1 = {}
+		ogp2 = {}
+
+		for i in range(len(freqs)): # MHz
+
+			freq = freqs[i]
  
-		raw, f = self.get_snap(chan, freq) 
+			raw, f = self.get_snap(chan, freq) 
 		
-		#rawsAB[i] = rawAB
-		#rawsCD[i] = rawCD
-
-		params1, params2 = self.fit_snap(freq, raw)
+			params1, params2 = self.fit_snap(raw, freq)
   
-		ogp1[freq], ogp2[freq] = self.convert_fit_to_ogp(freq, 
-								 paramsA, paramsB)
+			ogp1[freq], ogp2[freq] = self.calc_ogp(params1, params2, 
+							       freq)
 		
-        ogpA_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpA.values())))
-        ogpB_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpB.values())))
-        ogpC_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpC.values())))
-        ogpD_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpD.values())))
-        
-        multi_ogp = (ogpA_m,ogpB_m,ogpC_m,ogpD_m)        
-        
-        if save:		
-		np.savez(fname, zdok0_ogp = multi_ogp)       
+			ogp1_m = tuple(map(lambda y: sum(y)/float(len(y)), 
+					   zip(*ogp1.values())))
 
-        if save_raws:		
-		np.savez(raw_fname, freqs = freqs, rawsAB = rawsAB, rawsCD = rawsCD)
+			ogp2_m = tuple(map(lambda y: sum(y)/float(len(y)), 
+					   zip(*ogp2.values())))
+        
+			ogp_chan = (ogp1_m, ogp2_m)
 
-	return multi_ogp, multi_sinad, multi_sfdr
+			if set_ogp:
+				
+				self.set_ogp(ogp_chan, chan)
+				
+			
+
+		multi_ogp.append(ogp_chan)
+			
+	if save:		
+		np.savez(fname, multi_ogp = multi_ogp, chans = chans)       
+
+
+	return multi_ogp, chans
 
 
     #
@@ -444,8 +465,8 @@ class ADC5g_Calibration_Tools (object):
 		rawAB = np.array(adc5g.get_snapshot(self.roach, 'scope_raw_a0_snap')) 
 		rawCD = np.array(adc5g.get_snapshot(self.roach, 'scope_raw_c0_snap'))
 
-		ogpA[i], ogpB[i] = self.convert_noise_to_ogp(rawAB)
-		ogpC[i], ogpD[i] = self.convert_noise_to_ogp(rawCD)
+		ogpA[i], ogpB[i] = self.calc_ogp_noise(rawAB)
+		ogpC[i], ogpD[i] = self.calc_ogp_noise(rawCD)
 
         ogpA_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpA.values())))
         ogpB_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpB.values())))
@@ -463,7 +484,7 @@ class ADC5g_Calibration_Tools (object):
     # Takes noise source measurement and determines values for ogp corrections 
     # on ADC
     #
-    def convert_noise_to_ogp(self, raw):
+    def calc_ogp_noise(self, raw):
 
         N = len(raw)
 
