@@ -191,7 +191,7 @@ class ADC5g_Calibration_Tools (object):
     def calc_sinad(self, raw, freq):
 
         """
-	    Calculates the SINAD from the residuals of the fit. 
+	   Calculates the SINAD from the residuals of a fit. 
 	"""
 
 	del_phi = 2*math.pi*freq/self.clk
@@ -809,12 +809,6 @@ class ADC5g_Calibration_Tools (object):
 	    p0 = [128., 90., 90.]
 
 	    self.syn.set_freq(freq*1e6)
-
-#	    if (curr_ogp == None):
-#		    self.clear_ogp()
-#		    time.sleep(0.5)
-#	    else:
-#		    self.set_ogp(old_ogp, 0, cores=[1,2])
 
 	    self.clear_ogp()
 	    time.sleep(0.5)
