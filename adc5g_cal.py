@@ -241,6 +241,7 @@ class ADC5g_Calibration_Tools (object):
 	    pwr_in_peak = 0.0
 	    peak_db = 0.0
 	    sig_freq=0.0
+	    sig_pwr=0.0
      
         
 	    for i in range(4,len(freqs)):
@@ -306,7 +307,7 @@ class ADC5g_Calibration_Tools (object):
         	for i in range(len(freqs)): # MHz
         		freq = freqs[i]
         		raw, f = self.get_snap(chan, freq)
-        		sfdr_chan[freq], sinad_psd_chan[freq] = self.do_sfdr(freq,raw)
+        		sfdr_chan[freq], sinad_psd_chan[freq] = self.do_sfdr(raw,freq)
           
         	multi_sfdr.append(sfdr_chan)
         	multi_sinad_psd.append(sinad_psd_chan)
@@ -334,7 +335,7 @@ class ADC5g_Calibration_Tools (object):
         	for i in range(len(freqs)): # MHz
         		freq = freqs[i]
         		raw, f = self.get_snap(chan, freq)      
-        		sinad_chan[freq] = self.calc_sinad(freq,raw)
+        		sinad_chan[freq] = self.calc_sinad(raw,freq)
       
     		multi_sinad.append(sinad_chan)
             
