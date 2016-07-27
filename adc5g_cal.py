@@ -117,10 +117,12 @@ class ADC5g_Calibration_Tools (object):
 	   Takes a snap shot on channel 'chan' of a cw tone
 	   of frequency 'freq' (MHz)
 	"""
-	    
-	self.syn.output_on()
-	self.syn.set_freq(freq*1e6)
-	time.sleep(.5)
+
+	if freq != None:
+
+		self.syn.output_on()
+		self.syn.set_freq(freq*1e6)
+		time.sleep(.5)
 
 	reg = self.get_channel_snap_reg(chan)
 	raw = array(adc5g.get_snapshot(self.roach, reg))
@@ -349,7 +351,7 @@ class ADC5g_Calibration_Tools (object):
         return multi_sinad     
 
 
-    def get_ogp(self, chan):
+    def get_ogp_chan(self, chan):
 
         """
 	   Returns ogp values for a channel 'chan'
@@ -369,6 +371,29 @@ class ADC5g_Calibration_Tools (object):
             ogp_chan.append(ogp_core)
 
         return ogp_chan
+
+    def get_ogp(self, chans=[0,1]):
+
+        """
+	   Get OGP for all channels in 'chans'
+	"""
+
+	for chan in chans:
+
+		ogp_chan = self.get_ogp_chan(chan)
+
+		print
+		print 'OGP set on channel %i' %chan
+		print
+		
+		print 'Core 1'
+		print ogp_chan[0]
+		print
+
+		print 'Core 2'
+		print ogp_chan[1]
+		print
+	
 
     def set_ogp(self, ogp_chan, chan):
 
@@ -403,7 +428,7 @@ class ADC5g_Calibration_Tools (object):
 
         """
 	   Generates frequency averaged set of ogp for channels in 'chans'
-	   Can save to .npz file and/or set generated OGP values
+	   Can save to .npz file and/or set generated OGP values to ADC
 	   
 	"""
 
@@ -450,49 +475,59 @@ class ADC5g_Calibration_Tools (object):
 	return multi_ogp, chans
 
 
-    #
-    # Generates average ogp values from noise source
-    #
-    def do_ogp_noise_source(self, rpt, save=False, fname='ogp_noise_default.npz'):
 
-        ogpA = {}
-        ogpB = {}
-        ogpC = {}
-        ogpD = {}
+    def do_ogp_noise_source(self, rpt, chans = [0,1], set_ogp = False, 
+			    save=False, fname='ogp_noise_chans01.npz'):
 
-        for i in range(rpt):
+        """
+	   Calculates OGP from noise source for channels in 'chans'
+	   averaged over 'rpts', can set OGP and/or save to file
+	"""
 
-		rawAB = np.array(adc5g.get_snapshot(self.roach, 'scope_raw_a0_snap')) 
-		rawCD = np.array(adc5g.get_snapshot(self.roach, 'scope_raw_c0_snap'))
+	multi_ogp = []
 
-		ogpA[i], ogpB[i] = self.calc_ogp_noise(rawAB)
-		ogpC[i], ogpD[i] = self.calc_ogp_noise(rawCD)
+	for chan in chans:
 
-        ogpA_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpA.values())))
-        ogpB_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpB.values())))
-        ogpC_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpC.values())))
-        ogpD_m = tuple(map(lambda y: sum(y)/float(len(y)), zip(*ogpD.values())))
+		ogp1 = {}
+		ogp2 = {}
 
-        multi_ogp = (ogpA_m,ogpB_m,ogpC_m,ogpD_m)
+		for i in range(rpt):
+
+			raw, f = self.get_snap(chan, None)
+			ogp1[i], ogp2[i] = self.calc_ogp_noise(raw)
+
+		ogp1_m = tuple(map(lambda y: sum(y)/float(len(y)), 
+				   zip(*ogp1.values())))
+
+		ogp2_m = tuple(map(lambda y: sum(y)/float(len(y)), 
+				   zip(*ogp2.values())))
+
+		ogp_chan = (ogp1_m, ogp2_m) 
+
+		if set_ogp:
+
+			self.set_ogp(ogp_chan, chan)
+
+		multi_ogp.append(ogp_chan)
 
         if save:
-                np.savez(fname, zdok0_ogp = multi_ogp)
+                np.savez(fname, multi_ogp = multi_ogp, chans = chans)
 
-        return multi_ogp
+        return multi_ogp, chans
 	
-    #
-    # Takes noise source measurement and determines values for ogp corrections 
-    # on ADC
-    #
+
     def calc_ogp_noise(self, raw):
 
+        """
+	   Determines OGP coefficients from snapshot of noise source
+	"""
         N = len(raw)
 
         raw_off = sum(raw)/float(N)
 	    
 	raw_amp = sum(abs(raw-raw_off))/float(N)
 
-	multi_ogp = []
+	ogp_chan = []
 
 	for i in range(0,2):
 
@@ -504,44 +539,67 @@ class ADC5g_Calibration_Tools (object):
 		rel_amp = 100.0*(raw_amp-amp)/raw_amp
 		
 		ogp_core = (off, rel_amp, 0)
-		multi_ogp.append(ogp_core)
+		ogp_chan.append(ogp_core)
 
-	return multi_ogp
+	return ogp_chan
 
-    #
-    # Updates ogp from file
-    #
-    def update_ogp(self, fname='ogp_noise_default.npz'):
 
-        zdok = 0
+    def update_ogp(self, fname='ogp_chans01.npz'):
+	    
+        """
+	   Updates ogp from .npz file
+	"""
 
 	df = np.load(fname)
-	zdok0_ogp = df['zdok0_ogp']
+	multi_ogp = df['multi_ogp']
+	chans = df['chans']
 
-	print
-	print "Setting ogp for zdok0..."
-	print zdok0_ogp
-	print
+	i = 0
+	for chan in chans:
+
+		ogp_chan = multi_ogp[i]
+
+		
+		print
+		print "Setting ogp for chan %i..." %chan
+		print ogp_chan
+		print
 	
-	self.set_ogp(multi_ogp = zdok0_ogp, zdok = zdok)
-
-    #
-    # Sets ogp to 0 for a list of cores
-    #
-    def clear_ogp(self, cores=[1,2,3,4]):
-
-	for core in cores:
-
-              adc5g.set_spi_offset(self.roach, 0, core, 0)
-              adc5g.set_spi_gain(self.roach, 0, core, 0)
-	      adc5g.set_spi_phase(self.roach, 0, core, 0)
+		self.set_ogp(ogp_chan = ogp_chan, chan = chan)
+		i += 1
 
 	self.roach.progdev(self.bitstream)
-	
-    #
-    # Determines residuals from raw snapshot and fitted sine
-    #
-    def get_code_errors(self, freq, raw):
+
+
+    def clear_ogp(self, chans = [0,1,2,3]):
+
+        """
+	   Sets OGP to 0 for channels in 'chans'
+        """
+
+	for chan in chans:
+
+		zdok, cores = self.get_channel_core_spi(chan)
+
+		for core in cores:
+
+			adc5g.set_spi_offset(self.roach, zdok, core, 0)
+
+			adc5g.set_spi_gain(self.roach, zdok, core, 0)
+
+			adc5g.set_spi_phase(self.roach, zdok, core, 0)
+
+        self.roach.progdev(self.bitstream)
+
+#
+# INL Functions
+#
+
+    def get_code_errors(self, raw, freq):
+
+         """
+	    Determines residual errors for all 256 output codes
+	 """
 
          s = []
 	 c = []
@@ -608,11 +666,15 @@ class ADC5g_Calibration_Tools (object):
 
 	 return errors
 
-    #
-    # Determines INL corrections based on code error data
-    #
-    def fit_inl(self, freq, raw):
-         
+
+
+    def fit_inl(self, raw, freq):
+
+         """
+	    Finds 17 INL code correction coefficients for each core in a channel
+	    based on residual code errors
+	 """
+
          errors1, errors2 = zip(*self.get_code_errors(freq,raw))
          
          corrections = np.zeros((17, 3), dtype = 'float')
@@ -653,104 +715,164 @@ class ADC5g_Calibration_Tools (object):
 		 corrections[corr_level][1] = av1
 		 corrections[corr_level][2] = av2
         
-	 return corrections
+	
+         codes, inl1, inl2 = zip(*corrections)
+	 inl_chan = (inl1, inl2)
+
+	 return inl_chan
 
 
-    def get_inl(self, zdok = 0, cores = [1,2,3,4]):
-	    """
-	        Get INL correction coefficients (17 coeff/core)
-	    """
+    def get_inl_chan(self, chan)
 
-	    multi_inl = []
+         """
+	    Returns INL correction coefficients (17 coeff/core) 
+	    for channel 'chan'
+	 """
 
-	    for core in cores:
+	 inl_chan = []
 
-		    inl = adc5g.get_inl_registers(self.roach, zdok, core)
+	 zdok, cores = self.get_channel_core_spi(chan)
+
+	 for core in cores:
+
+		 inl = adc5g.get_inl_registers(self.roach, zdok, core)
             
-		    multi_inl.append(inl)
+		 inl_chan.append(inl)
 
-	    return multi_inl
+	 return inl_chan
 
 
-    def do_inl_sweep(self, freq, zdok = [0], save = False, fname = 'inl_default.npz'):
-    	
-    	inlA = {}
-    	inlB = {}
-    	inlC = {}
-    	inlD = {}
-    	
-    	rawAB = adc5g.get_snapshot(self.roach, 'scope_raw_a%i_snap' %(zdok))
-	rawCD = adc5g.get_snapshot(self.roach, 'scope_raw_c%i_snap' %(zdok))
-	
-	residA, residB = self.get_resid(freq, rawAB)
-	residC, residD = self.get_resid(freq, rawCD)
-	
-	correctionsAB = self.convert_residuals_to_inl(freq, rawAB)
-	correctionsCD = self.convert_residuals_to_inl(freq, rawCD)
-	
-	code_num,inlA,inlB = zip(*correctionsAB)
-	code_num,inlC,inlD = zip(*correctionsCD)
-	
-	multi_inl = (code_num, inlA, inlB, inlC, inlD)
-	
-	if save:
-		np.savez(fname, zdok0_inl = multi_inl)
-		
-	return multi_inl
+    def get_inl(self, chans=[0,1]):
     
- 
-    def set_inl(self, errors):
+         """
+	    Get INL for all channels in 'chans'
+	 """
+     
+	 for chan in chans:
 
-        zdok = 0        
+	        inl_chan = self.get_inl_chan(chan)
+
+	        print
+                print 'INL set on channel %i' %chan
+                print
+
+                print 'Core 1'
+                print inl_chan[0]
+                print
+
+                print 'Core 2'
+                print inl_chan[1]
+                print   
+
+
+    def set_inl(self, chan, inl_chan):
+
+        """
+	   Sets INL for two cores of channel 'chan'
+	   inl_chan is format (inl1, inl2)
+	"""
+
+        zdok, cores = self.get_channel_core_spi(chan)
+
+        i = 0
+
+	for core in cores:
+
+		inl1, inl2 = inl_chan[i]
+
+		adc5g.set_inl_registers(self.roach, zdok, core, inl1)
+		adc5g.set_inl_registers(self.roach, zdok, core, inl2)
+		
+		i += 1
+	
+	self.roach.progdev(self.bitstream)
         
-        #df = np.load(fname)
-	#zdok0_inl = df['zdok0_inl']
- 
-	codes, inl_a, inl_b = zip(*errors)
 
-        adc5g.set_inl_registers(self.roach, zdok, 1, inl_a)
-        adc5g.set_inl_registers(self.roach, zdok, 2, inl_b)
-        #adc5g.set_inl_registers(self.roach,zdok,3,zdok0_inl[3])
-        #adc5g.set_inl_registers(self.roach,zdok,4,zdok0_inl[4])
-             
-        
-    #
-    # Sets INL corrections from saved file
-    #
-    def update_inl(self, fname='inl_default.npz'):
+    def do_inl(chans=[0,1], freq, set_inl = False, save = False, 
+	       fname = 'inl_chans01.npz'):
 
-        zdok = 0
+       """
+          Calculates INL from snap shot for all channels in 'chans'
+	  Can set INL and/or save to file
+       """
+       
+       multi_inl = []
+
+       for chan in chans:
+
+                raw, f = self.get_snap(chan, freq)
+
+		inl1, inl2 = self.fit_inl(raw, f)
+
+                inl_chan = (inl1, inl2)
+
+                if set_inl:
+
+                        self.set_inl(inl_chan, chan)
+
+                multi_inl.append(inl_chan)
+
+        if save:
+                np.savez(fname, multi_inl = multi_inl, chans = chans)
+
+        return multi_inl, chans
+
+
+    def update_inl(self, fname='inl_chans01.npz'):
+
+        """
+	   Updates INL from .npz file
+	"""
 
 	df = np.load(fname)
-	zdok0_inl = df['zdok0_inl']
+	multi_inl = df['multi_inl']
+	chans = df['chans']
 
-	print
-	print "Setting inl for zdok0..."
-	print zdok0_inl
-	print
-	
-	self.set_inl(multiple_inl = zdok0_inl, zdok = zdok)
- 
-    #
-    # Sets all INL to 0
-    #
-    def clear_inl(self):
-        
-        zdok = 0
+	i = 0
+        for chan in chans:
 
-        for core in range(1,5):
+                inl_chan = multi_inl[i]
 
-              adc5g.set_inl_registers(self.roach, zdok, core, np.zeros(17))
+                print
+                print "Setting inl for chan %i..." %chan
+                print inl_chan
+                print
+
+                self.set_inl(inl_chan = inl_chan, chan = chan)
+                i += 1
 
         self.roach.progdev(self.bitstream)
-        
-    
-    def save_raw_npz(self, raw, freq, chan):
+		
 
-	t = datetime.datetime.now()
-        header = t.strftime("%Y-%m-%d %H:%M") + '_'
-	snap_file = '%s_%i_MHZ_raw_%s_snap.npz' %(header, freq, chan)
-	np.savez(snap_file, header=header, freq=freq, raw=raw)
+
+    def clear_inl(self, chans = [0,1,2,3]):
+
+        """
+	   Sets INL to 0 for all channels in 'chans'
+	"""
+
+        inl0 = np.zeros(17)
+
+        for chan in chans:
+
+              zdok, cores = self.get_channel_core_spi(chan)
+
+	      for core in cores:
+
+		      adc5g.set_inl_registers(self.roach, zdok, core, inl0) 
+
+        self.roach.progdev(self.bitstream)
+
+#
+# Misc. 
+#        
+    
+    #def save_raw_npz(self, raw, freq, chan):
+
+	#t = datetime.datetime.now()
+        #header = t.strftime("%Y-%m-%d %H:%M") + '_'
+	#snap_file = '%s_%i_MHZ_raw_%s_snap.npz' %(header, freq, chan)
+	#np.savez(snap_file, header=header, freq=freq, raw=raw)
 	    
 
     def levels_hist(self, raw):
@@ -786,6 +908,7 @@ class ADC5g_Calibration_Tools (object):
 	plt.show()
 
     def plot_compare_ogp(self, new_ogp, old_ogp, freq, pts=50):
+
 	    """
 	    This function plots a comparison between a snap and a fitted sine
 	    for two different sets of ogp
