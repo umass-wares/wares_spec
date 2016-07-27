@@ -675,7 +675,7 @@ class ADC5g_Calibration_Tools (object):
 	    based on residual code errors
 	 """
 
-         errors1, errors2 = zip(*self.get_code_errors(freq,raw))
+         errors1, errors2 = zip(*self.get_code_errors(raw, freq))
          
          corrections = np.zeros((17, 3), dtype = 'float')
 
@@ -722,7 +722,7 @@ class ADC5g_Calibration_Tools (object):
 	 return inl_chan
 
 
-    def get_inl_chan(self, chan)
+    def get_inl_chan(self, chan):
 
          """
 	    Returns INL correction coefficients (17 coeff/core) 
@@ -778,7 +778,7 @@ class ADC5g_Calibration_Tools (object):
 
 	for core in cores:
 
-		inl1, inl2 = inl_chan[i]
+		inl1, inl2 = inl_chan
 
 		adc5g.set_inl_registers(self.roach, zdok, core, inl1)
 		adc5g.set_inl_registers(self.roach, zdok, core, inl2)
@@ -788,7 +788,7 @@ class ADC5g_Calibration_Tools (object):
 	self.roach.progdev(self.bitstream)
         
 
-    def do_inl(chans=[0,1], freq, set_inl = False, save = False, 
+    def do_inl(self, chans, freq, set_inl = False, save = False, 
 	       fname = 'inl_chans01.npz'):
 
        """
@@ -808,14 +808,14 @@ class ADC5g_Calibration_Tools (object):
 
                 if set_inl:
 
-                        self.set_inl(inl_chan, chan)
+                        self.set_inl(chan, inl_chan)
 
                 multi_inl.append(inl_chan)
 
-        if save:
-                np.savez(fname, multi_inl = multi_inl, chans = chans)
+       if save:
+	       np.savez(fname, multi_inl = multi_inl, chans = chans)
 
-        return multi_inl, chans
+       return multi_inl, chans
 
 
     def update_inl(self, fname='inl_chans01.npz'):
