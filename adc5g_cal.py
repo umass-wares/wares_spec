@@ -220,7 +220,7 @@ class ADC5g_Calibration_Tools (object):
         
 	return sinad
         
-    def do_sfdr(self, raw, freq, nfft=1024):
+    def do_sfdr(self, raw, freq):
 
 	    """
 	    Calculates the sinad and sfdr of the raw data. It first gets the PSD.
@@ -229,6 +229,7 @@ class ADC5g_Calibration_Tools (object):
 	    """
 
 	    samp_freq=self.clk
+	    nfft=len(raw)
 	    power, freqs = psd(raw, nfft, Fs=samp_freq*1e6, 
 			       detrend=detrend_mean, scale_by_freq=True)
 	    freqs = freqs/1e6
@@ -239,6 +240,8 @@ class ADC5g_Calibration_Tools (object):
 	    peak_freq = 0.0
 	    pwr_in_peak = 0.0
 	    peak_db = 0.0
+	    sig_freq=0.0
+     
         
 	    for i in range(4,len(freqs)):
 
@@ -277,7 +280,7 @@ class ADC5g_Calibration_Tools (object):
 	    sinad = 10.0*math.log10(sig_pwr/(tot_pwr - sig_pwr))
 	    return sfdr, sinad
         
-    def do_sfdr_sinad_cw_sweep( self, zdok=0, save=False, fname='sfdr_sinad.npz'):
+    def do_sfdr_sinad_cw_sweep( self, chans=[0,1], save=False, fname='sfdr_sinad.npz'):
 
         """
         Calculates the SFDR and SINAD from a sweep in frequency from 50 Mhz to
@@ -292,63 +295,53 @@ class ADC5g_Calibration_Tools (object):
 	if 400 in freqs:
 	     x=np.where(freqs==400)
 	     freqs[x[0][0]]=401
+      
+	multi_sfdr = []
+	multi_sinad_psd=[]
 
-	sfdrAB = {}
-	sfdrCD = {}
-	sinadAB_psd= {}
-	sinadCD_psd= {}
-
-	for i in range(len(freqs)): # MHz
-
-		freq = freqs[i]
-		self.syn.set_freq(freq*1e6)
-		time.sleep(2.0)
-	
-		rawAB = adc5g.get_snapshot(self.roach, 'scope_raw_a%i_snap' %(zdok))
-		rawCD = adc5g.get_snapshot(self.roach, 'scope_raw_c%i_snap' %(zdok))
-  
-		sfdrAB[freq], sinadAB_psd[freq] = self.do_sfdr(freq,rawAB)
-		sfdrCD[freq], sinadCD_psd[freq] = self.do_sfdr(freq,rawCD)
-  
-  		multi_sfdr = (sfdrAB, sfdrCD)
-		multi_sinad_psd = (sinadAB_psd, sinadCD_psd)
+	for chan in chans:
+        	sfdr_chan = {}
+        	sinad_psd_chan= {}
+        
+        	for i in range(len(freqs)): # MHz
+        		freq = freqs[i]
+        		raw, f = self.get_snap(chan, freq)
+        		sfdr_chan[freq], sinad_psd_chan[freq] = self.do_sfdr(freq,raw)
+          
+        	multi_sfdr.append(sfdr_chan)
+        	multi_sinad_psd.append(sinad_psd_chan)
         
 	if save:		
-		np.savez(fname, zdok_sfdr=multi_sfdr, zdok_sinad_psd=multi_sinad_psd)
+		np.savez(fname, sfdr=multi_sfdr, sinad_psd=multi_sinad_psd)
 
 	return multi_sfdr, multi_sinad_psd
 
 
-    def do_sinad_cw_sweep( self, zdok=0, save=False, fname='sinad.npz'):
+    def do_sinad_cw_sweep( self, chans=[0,1], save=False, fname='sinad.npz'):
 
         """
         Calculates the SINAD from a sweep in frequency from 50 Mhz to
         final_freq Mhz. 
         """
-
-        final_freq = self.clk /2
-        freqs = np.linspace(50,final_freq,16)     
-        sinadAB= {}
-        sinadCD= {}
-    
-        for i in range(len(freqs)): # MHz
-    
-    		freq = freqs[i]
-    		self.syn.set_freq(freq*1e6)
-    		time.sleep(2.0)
-    	
-    		rawAB = adc5g.get_snapshot(self.roach, 'scope_raw_a%i_snap' %(zdok))
-    		rawCD = adc5g.get_snapshot(self.roach, 'scope_raw_c%i_snap' %(zdok))
+	final_freq = self.clk /2
+	freqs = np.linspace(50,final_freq,16)
+ 
+	multi_sinad=[]
+ 
+	for chan in chans:
+        	sinad_chan= {}
+        
+        	for i in range(len(freqs)): # MHz
+        		freq = freqs[i]
+        		raw, f = self.get_snap(chan, freq)      
+        		sinad_chan[freq] = self.calc_sinad(freq,raw)
       
-    		sinadAB[freq] = self.calc_sinad(freq,rawAB)
-    		sinadCD[freq] = self.calc_sinad(freq,rawCD)
-      
-    		multi_sinad = (sinadAB, sinadCD)
+    		multi_sinad.append(sinad_chan)
             
-        if save:		
-    		np.savez(fname, zdok_sinad=multi_sinad)
+	if save:		
+        	np.savez(fname, sinad=multi_sinad)
     
-        return multi_sinad     
+	return multi_sinad     
 
 
     def get_ogp_chan(self, chan):
