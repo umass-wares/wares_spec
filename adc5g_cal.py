@@ -122,7 +122,7 @@ class ADC5g_Calibration_Tools (object):
 
 		self.syn.output_on()
 		self.syn.set_freq(freq*1e6)
-		time.sleep(.5)
+		time.sleep(1)
 
 	reg = self.get_channel_snap_reg(chan)
 	raw = array(adc5g.get_snapshot(self.roach, reg))
