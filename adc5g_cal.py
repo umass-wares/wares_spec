@@ -286,15 +286,16 @@ class ADC5g_Calibration_Tools (object):
     	        print ("sig_pwr=%f, spur_pwr= %f, tot_pwr=%f" %(sig_pwr, spur_pwr, tot_pwr))
 	    return sfdr, sinad
         
-    def do_sfdr_sinad_cw_sweep( self, chans=[0,1], save=False, fname='sfdr_sinad.npz'):
+    def do_sfdr_sinad_cw_sweep( self, chans=[0,1], save=False, fname='sfdr_sinad.npz',freqarray=[50,800,16]):
 
         """
         Calculates the SFDR and SINAD from a sweep in frequency from 50 Mhz to
-        final_freq Mhz. 
+        final_freq Mhz.
+        freqarray [initial freq,final freq, steps]
         """
 
-	final_freq = self.clk /2
-	freqs = np.linspace(50,final_freq,16)
+	#final_freq = self.clk /2
+	freqs = np.linspace(freqarray[0],freqarray[1],freqarray[2])
  
      #When freq is 400Mhz, it has no spurrious frequency with clk=1600. SFDR 
      #can't be calculated in this case. 
@@ -323,14 +324,16 @@ class ADC5g_Calibration_Tools (object):
 	return multi_sfdr, multi_sinad_psd
 
 
-    def do_sinad_cw_sweep( self, chans=[0,1], save=False, fname='sinad.npz'):
+    def do_sinad_cw_sweep( self, chans=[0,1], save=False, fname='sinad.npz', freqarray=[50,800,16]):
 
         """
         Calculates the SINAD from a sweep in frequency from 50 Mhz to
         final_freq Mhz. 
+        freqarray [initial freq,final freq, steps]
         """
-	final_freq = self.clk /2
-	freqs = np.linspace(50,final_freq,16)
+	#final_freq = self.clk /2
+	#freqs = np.linspace(50,final_freq,16)
+	freqs = np.linspace(freqarray[0],freqarray[1],freqarray[2])
  
 	multi_sinad=[]
  
