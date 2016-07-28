@@ -240,13 +240,12 @@ class ADC5g_Calibration_Tools (object):
 	    peak_freq = 0.0
 	    pwr_in_peak = 0.0
 	    peak_db = 0.0
-	    sig_freq=0.0
 	    sig_pwr=0.0
      
         
 	    for i in range(4,len(freqs)):
 
-		    if abs(freqs[i] - sig_freq) < 4:
+		    if abs(freqs[i] - freq) < 4:
 			    test = -70
 		    else:
 			    test = -90
@@ -259,7 +258,7 @@ class ADC5g_Calibration_Tools (object):
 			    if db[i] < test:
 				    in_peak = False
 
-				    if abs(peak_freq - sig_freq) < 1:
+				    if abs(peak_freq - freq) < 1:
 					    sig_pwr = pwr_in_peak
 				    else:
 					    if pwr_in_peak > spur_pwr:
@@ -277,6 +276,9 @@ class ADC5g_Calibration_Tools (object):
 			    peak_db = db[i]
 			    in_peak = True
 
+	    if spur_pwr == 0:
+	        spur_pwr=1
+	        print "No spurrious frequency at %f" % freq
 	    sfdr = 10.0*math.log10(sig_pwr / spur_pwr)
 	    sinad = 10.0*math.log10(sig_pwr/(tot_pwr - sig_pwr))
 	    return sfdr, sinad
