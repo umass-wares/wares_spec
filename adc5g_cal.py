@@ -276,11 +276,14 @@ class ADC5g_Calibration_Tools (object):
 			    peak_db = db[i]
 			    in_peak = True
 
-	    if spur_pwr == 0:
-	        spur_pwr=1
-	        print "No spurrious frequency at %f" % freq
-	    sfdr = 10.0*math.log10(sig_pwr / spur_pwr)
-	    sinad = 10.0*math.log10(sig_pwr/(tot_pwr - sig_pwr))
+	    try:
+    	        sfdr = 10.0*math.log10(sig_pwr / spur_pwr)
+    	        sinad = 10.0*math.log10(sig_pwr/(tot_pwr - sig_pwr))
+	    except:
+    	        sfdr=0
+    	        sinad=0         
+    	        print ("Math error at freq %f Mhz." %freq)
+    	        print ("sig_pwr=%f, spur_pwr= %f, tot_pwr=%f" %(sig_pwr, spur_pwr, tot_pwr))
 	    return sfdr, sinad
         
     def do_sfdr_sinad_cw_sweep( self, chans=[0,1], save=False, fname='sfdr_sinad.npz'):
