@@ -299,9 +299,9 @@ class ADC5g_Calibration_Tools (object):
  
      #When freq is 400Mhz, it has no spurrious frequency with clk=1600. SFDR 
      #can't be calculated in this case. 
-	if 400 in freqs:
-	     x=np.where(freqs==400)
-	     freqs[x[0][0]]=401
+#	if 400 in freqs:
+#	     x=np.where(freqs==400)
+#	     freqs[x[0][0]]=401
       
 	multi_sfdr = []
 	multi_sinad_psd=[]
