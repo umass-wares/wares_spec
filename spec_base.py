@@ -155,9 +155,10 @@ class FPGA(object):
         self.acc_n = self.fpga.read_uint('sync_cnt')
         return self.acc_n    
     
-    def get_data(self, chan):
+    def get_data(self, chan, read_acc_n=False):
         t1 = time.time()
-        acc_n = self.get_acc_n()
+        if read_acc_n:
+            acc_n = self.get_acc_n()
         
         #
         # GET DATA
@@ -199,13 +200,29 @@ class FPGA(object):
         interleave_a[3::4] = a_3
 
         read_time = time.time() - t1
+
         print "acc_n = %d; Got data in %s secs" % (acc_n, read_time)
         #return acc_n, numpy.array(interleave_a, dtype=float)
-        return acc_n, interleave_a, read_time
+        
+        if read_acc_n:
+            return acc_n, interleave_a, read_time
 
-    def get_data_fast(self):
+        else:
+            return interleave_a, read_time
+
+
+    def get_data_all(self):
         t1 = time.time()
-        acc_n = self.get_acc_n()
+        data = {}
+        for i in range(4):
+            acc_n, dt = self.get_data(i)
+            data[i] = dt
+        print "Got all data in %s secs" % (time.time() - t1)            
+        return data
+    
+    def get_data_fast(self, chan):
+        t1 = time.time()
+        #acc_n = self.get_acc_n()
         txt = ''
 
         #
@@ -215,13 +232,14 @@ class FPGA(object):
         # No interleaving, saves into txt
         #
 
-        txt += self.fpga.read('bram00', self.bram_size*(self.numchannels/4))
-        txt += self.fpga.read('bram01', self.bram_size*(self.numchannels/4))
-        txt += self.fpga.read('bram02', self.bram_size*(self.numchannels/4))
-        txt += self.fpga.read('bram03', self.bram_size*(self.numchannels/4))
+        txt += self.fpga.read('bram%i0' % chan, self.bram_size*(self.numchannels/4))
+        txt += self.fpga.read('bram%i1' % chan, self.bram_size*(self.numchannels/4))
+        txt += self.fpga.read('bram%i2' % chan, self.bram_size*(self.numchannels/4))
+        txt += self.fpga.read('bram%i3' % chan, self.bram_size*(self.numchannels/4))
 
-        print "acc_n = %d; Got data in %s secs" % (acc_n, time.time() - t1)
-        #return acc_n, txt
+        #print "acc_n = %d; Got data in %s secs" % (acc_n, time.time() - t1)
+        print "Got data in %s secs" % (time.time() - t1)
+        return txt
 
     def get_data_normalize(self, sleep):
 
@@ -423,7 +441,32 @@ class FPGA(object):
         acc_n, data, read_time = self.get_data(chan)
         return data, start_time, read_time #/float(acc_n)
         
-     
+    def integrate_all(self, integtime):
+        t1 = time.time()
+        self.reset()
+        time.sleep(integtime)
+        data = {}
+        for i in range(4):
+            data[i], read_time = self.get_data(i, read_acc_n=False)
+        print "Took %s seconds for all 4 pixels" % (time.time() - t1)
+        return data
+    
+    def map_dump(self, dumptime, maptime, chans=[0, 1, 2, 3]):
+        t0 = time.time()
+        ndmp = int(maptime/dumptime)
+        mapdata = numpy.zeros((len(chans), self.numchannels, ndmp),
+                              dtype='float')
+        for i in range(ndmp):
+            self.reset()
+            time.sleep(dumptime)
+            t1 = time.time()
+            for chan in chans:
+                mapdata[chan, :, i], read_time = self.get_data(chan, read_acc_n=False)
+            print "Took %s seconds to read out %d pixels" % (time.time() - t1, len(chans))
+        print "Finished Map in %s seconds" % (time.time() - t0)
+        return mapdata
+    
+    
 class Integration(object):
 
     def __init__(self, intnum):
