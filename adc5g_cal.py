@@ -55,7 +55,8 @@ class ADC5g_Calibration_Tools (object):
 	    self.roach_id = roach_id
 	    self.bitstream = bitstream
 	    self.clk = clk
-	    self.freqs = np.arange(6)*50 + 100.0
+	    self.freqs_cores = np.linspace(100,clk/4,6,endpoint=False)
+	    self.freqs_bw = np.arange(50,clk/2,25)
 	    self.syn = HP8780A()
 
 	    roach = katcp_wrapper.FpgaClient(roach_id)
@@ -286,22 +287,20 @@ class ADC5g_Calibration_Tools (object):
     	        print ("sig_pwr=%f, spur_pwr= %f, tot_pwr=%f" %(sig_pwr, spur_pwr, tot_pwr))
 	    return sfdr, sinad
         
-    def do_sfdr_sinad_cw_sweep( self, chans=[0,1], save=False, fname='sfdr_sinad.npz',freqarray=[50,800,16]):
+    def do_sfdr_sinad_cw_sweep( self, chans=[0,1], save=False, 
+                               fname='sfdr_sinad.npz',
+                               freqarray=[]):
 
         """
         Calculates the SFDR and SINAD from a sweep in frequency from 50 Mhz to
         final_freq Mhz.
-        freqarray [initial freq,final freq, steps]
         """
 
 	#final_freq = self.clk /2
-	freqs = np.linspace(freqarray[0],freqarray[1],freqarray[2])
- 
-     #When freq is 400Mhz, it has no spurrious frequency with clk=1600. SFDR 
-     #can't be calculated in this case. 
-#	if 400 in freqs:
-#	     x=np.where(freqs==400)
-#	     freqs[x[0][0]]=401
+	if not freqarray:
+        	freqs = self.freqs_bw
+	else: 
+        	freqs=freqarray
       
 	multi_sfdr = []
 	multi_sinad_psd=[]
@@ -324,16 +323,18 @@ class ADC5g_Calibration_Tools (object):
 	return multi_sfdr, multi_sinad_psd
 
 
-    def do_sinad_cw_sweep( self, chans=[0,1], save=False, fname='sinad.npz', freqarray=[50,800,16]):
+    def do_sinad_cw_sweep( self, chans=[0,1], save=False, fname='sinad.npz',
+                          freqarray=[]):
 
         """
         Calculates the SINAD from a sweep in frequency from 50 Mhz to
         final_freq Mhz. 
-        freqarray [initial freq,final freq, steps]
+        freqarray array of freqs
         """
-	#final_freq = self.clk /2
-	#freqs = np.linspace(50,final_freq,16)
-	freqs = np.linspace(freqarray[0],freqarray[1],freqarray[2])
+ 	if not freqarray: #if freqarray is empty then...
+        	freqs = self.freqs_bw
+	else: 
+        	freqs = freqarray
  
 	multi_sinad=[]
  
@@ -434,7 +435,7 @@ class ADC5g_Calibration_Tools (object):
 	   
 	"""
 
-	freqs = self.freqs
+	freqs = self.freqs_cores
 
 	multi_ogp = []
 
