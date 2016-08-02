@@ -198,9 +198,10 @@ class FPGA(object):
         interleave_a[2::4] = a_2
         interleave_a[3::4] = a_3
 
-        print "acc_n = %d; Got data in %s secs" % (acc_n, time.time() - t1)
+        read_time = time.time() - t1
+        print "acc_n = %d; Got data in %s secs" % (acc_n, read_time)
         #return acc_n, numpy.array(interleave_a, dtype=float)
-        return acc_n, interleave_a
+        return acc_n, interleave_a, read_time
 
     def get_data_fast(self):
         t1 = time.time()
@@ -417,10 +418,10 @@ class FPGA(object):
         #self.prev_acc_n = 0
 
         self.reset()
-
+        start_time = time.time()
         time.sleep(integtime)
-        acc_n, data = self.get_data(chan)
-        return data #/float(acc_n)
+        acc_n, data, read_time = self.get_data(chan)
+        return data, start_time, read_time #/float(acc_n)
         
      
 class Integration(object):
