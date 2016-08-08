@@ -1,15 +1,4 @@
-
 #!/usr/bin/env python
-'''
-This script demonstrates programming an FPGA, configuring a wideband
-spectrometer and plotting the received data using the Python KATCP
-library along with the katcp_wrapper distributed in the corr
-package. Designed for use with TUT3 at the 2009 CASPER workshop.
-You need to have KATCP and CORR installed. Get them from
-http://pypi.python.org/pypi/katcp and
-http://casper.berkeley.edu/svn/trunk/projects/packetized_correlator/corr-0.4.0/
-Author: Jason Manley, November 2009.
-'''
 
 import corr,time,struct,sys,logging,pylab,matplotlib
 import numpy as np
@@ -20,6 +9,9 @@ from matplotlib.lines import Line2D
 import matplotlib.animation as animation
 import sys
 from scheduler import Task, Scheduler
+from adc5g_cal import ADC5g_Calibration_Tools
+
+test_bof = 'adc5g_tim_aleks_test_2015_Oct_14_1208.bof.gz'
 
 # 800 MHz
 bof_q = 'rspec_1600mhz_r112_asiaa_adc_4_2015_Dec_10_1410.bof.gz'
@@ -31,8 +23,10 @@ katcp_port = 7147
 intnum = 1
 
 class FPGA(object):
+
     def __init__(self, roach_id, katcp_port=7147,
                  bitstream = bof_q,
+                 cal_bitstream = test_bof,
                  skip = False,
                  quant = True,
                  acc_len = int(0.2*(2**28)/2048),
@@ -41,15 +35,17 @@ class FPGA(object):
                  numchannels = 2048,
                  bandwidth = 800.0 
                  ):
+
         self.roach = roach_id
+        self.fpga = None
         self.katcp_port = katcp_port
         self.bitstream = bitstream
+        self.cal_bistream = cal_bitstream
         self.skip = skip
         self.quant = quant
         self.acc_len = acc_len
         self.gain = gain
         self.shift = shift
-        self.fpga = None
         self.acc_n = 0
         self.numchannels = numchannels
         self.bandwidth = bandwidth
@@ -57,7 +53,7 @@ class FPGA(object):
             *float(self.bandwidth)/self.numchannels
         self.set_logging()
         self.connect()
-        self.program()
+        self.program(cal=True)
         self.configure()
 
         if self.quant:
@@ -74,7 +70,10 @@ class FPGA(object):
         self.logger.setLevel(10)
 
     def connect(self):
-        print('Connecting to server %s on port %i... ' % (self.roach, self.katcp_port)),
+
+        print('Connecting to server %s on port %i... ' % (self.roach, 
+                                                          self.katcp_port)),
+
         self.fpga = corr.katcp_wrapper.FpgaClient(self.roach, self.katcp_port,
                                                   timeout=10,
                                                   logger=self.logger)
@@ -85,7 +84,11 @@ class FPGA(object):
             print 'ERROR connecting to server %s on port %i.\n' % (self.roach, self.katcp_port)
             self.exit_fail()
 
-    def program(self):
+    def program(self, cal=False):
+
+        if cal:
+            self.adc_cal()
+
         print '------------------------'
         print 'Programming FPGA with %s...' % self.bitstream,
         if not self.skip:
@@ -94,7 +97,16 @@ class FPGA(object):
         else:
             print 'Skipped.'
 
+    def adc_cal(self, cal_file = None):
+
+        print '------------------------'
+        print 'Loading default OGP/INL corrections to ADCs'
+        adc_cal = ADC5g_Calibration_Tools()
+        adc_cal.update_ogp()
+        adc_cal.update_inl()
+
     def configure(self):
+        
         print 'Configuring accumulation period to %d...' % self.acc_len,
         self.fpga.write_int('acc_len', self.acc_len)
         print 'done'
@@ -154,9 +166,20 @@ class FPGA(object):
     def get_sync_cnt(self):
         self.acc_n = self.fpga.read_uint('sync_cnt')
         return self.acc_n    
+
+    def read_bram(self, chan, bramNo):
+
+        bram_array = np.array(struct.unpack('>%dl' %(self.numchannels/4.), 
+                                     self.fpga.read('bram%i%i' %(chan, bramNo),
+                                     self.bram_size*(self.numchannels/4), 0)),
+                                     dtype='float')
+
+        return bram_array
     
     def get_data(self, chan, read_acc_n=False):
+
         t1 = time.time()
+
         if read_acc_n:
             acc_n = self.get_acc_n()
         
@@ -168,30 +191,11 @@ class FPGA(object):
         # Interleaves 4 bram blocks into full spectrum
         #
 
-        a_0 = np.array(struct.unpack('>%dl' %(self.numchannels/4.), 
-                                        self.fpga.read('bram%i0' %chan,
-                                                       self.bram_size*(self.numchannels/4), 0)
-                                        ),
-                          dtype='float')
+        a_0 = self.read_bram(chan, 0)
+        a_1 = self.read_bram(chan, 1)
+        a_2 = self.read_bram(chan, 2)
+        a_3 = self.read_bram(chan, 3)
 
-        a_1 = np.array(struct.unpack('>%dl' % (self.numchannels/4.), 
-                                        self.fpga.read('bram%i1' %chan, 
-                                                       self.bram_size*(self.numchannels/4), 0)
-                                        ),
-                          dtype='float')
-
-        a_2 = np.array(struct.unpack('>%dl' % (self.numchannels/4.),
-                                        self.fpga.read('bram%i2' %chan,
-                                                       self.bram_size*(self.numchannels/4), 0)
-                                        ),
-                          dtype='float')
-
-        a_3 = np.array(struct.unpack('>%dl' % (self.numchannels/4.),
-                                        self.fpga.read('bram%i3' %chan,
-                                                       self.bram_size*(self.numchannels/4), 0)
-                                        ),
-                          dtype='float')
-      
         interleave_a = np.empty((self.numchannels,), dtype=float)
         
         interleave_a[0::4] = a_0
@@ -202,7 +206,6 @@ class FPGA(object):
         read_time = time.time() - t1
 
         print "acc_n = %d; Got data in %s secs" % (acc_n, read_time)
-        #return acc_n, numpy.array(interleave_a, dtype=float)
         
         if read_acc_n:
             return acc_n, interleave_a, read_time
@@ -212,6 +215,7 @@ class FPGA(object):
 
 
     def get_data_all(self):
+
         t1 = time.time()
         data = {}
         for i in range(4):
@@ -219,99 +223,6 @@ class FPGA(object):
             data[i] = dt
         print "Got all data in %s secs" % (time.time() - t1)            
         return data
-    
-    def get_data_fast(self, chan):
-        t1 = time.time()
-        #acc_n = self.get_acc_n()
-        txt = ''
-
-        #
-        # GET DATA FAST
-        #
-        # Retrieves binary data string from bram00-bram03 registers
-        # No interleaving, saves into txt
-        #
-
-        txt += self.fpga.read('bram%i0' % chan, self.bram_size*(self.numchannels/4))
-        txt += self.fpga.read('bram%i1' % chan, self.bram_size*(self.numchannels/4))
-        txt += self.fpga.read('bram%i2' % chan, self.bram_size*(self.numchannels/4))
-        txt += self.fpga.read('bram%i3' % chan, self.bram_size*(self.numchannels/4))
-
-        #print "acc_n = %d; Got data in %s secs" % (acc_n, time.time() - t1)
-        print "Got data in %s secs" % (time.time() - t1)
-        return txt
-
-    def get_data_normalize(self, sleep):
-
-        self.reset()
-        time.sleep(sleep)
-
-        t1 = time.time()
-        acc_n = self.get_acc_n()
-        
-        #
-        # NORMALIZED VERSION
-        #
-        # Retrieves data from bram0-bram3 registers
-        # Interleaves into full spectrum
-        # Normalizes by acc_n
-        #
-
-        a_0 = numpy.array(struct.unpack('>%dq' % (self.numchannels/4.), 
-                                        self.fpga.read('bram00',
-                                                       8*(self.numchannels/4.), 0)
-                                        ),
-                          dtype='float')
-
-        a_1 = numpy.array(struct.unpack('>%dq' % (self.numchannels/4.), 
-                                        self.fpga.read('bram01', 
-                                                       8*(self.numchannels/4.), 0)
-                                        ),
-                          dtype='float')
-
-        a_2 = numpy.array(struct.unpack('>%dq' % (self.numchannels/4.),
-                                        self.fpga.read('bram02',
-                                                       8*(self.numchannels/4.), 0)
-                                        ),
-                          dtype='float')
-
-        a_3 = numpy.array(struct.unpack('>%dq' % (self.numchannels/4.),
-                                        self.fpga.read('bram03',
-                                                       8*(self.numchannels/4.), 0)
-                                        ),
-                          dtype='float')
-      
-        interleave_a = numpy.empty((self.numchannels,), dtype=float)
-        
-        interleave_a[0::4] = a_0
-        interleave_a[1::4] = a_1
-        interleave_a[2::4] = a_2
-        interleave_a[3::4] = a_3
-
-        print "acc_n = %d; Got data in %s secs" % (acc_n, time.time() - t1)
-        #return acc_n, numpy.array(interleave_a, dtype=float)
-        return acc_n, interleave_a/float(acc_n)
-
-    
-#    def get_data_old(self):
-#        t1 = time.time()        
-#        acc_n = self.get_acc_n()
-        
-#        a_0 = numpy.array(struct.unpack('>1024l', self.fpga.read('even',1024*4,0)),
-#                          dtype=float)
-#        a_1 = numpy.array(struct.unpack('>1024l', self.fpga.read('odd',1024*4,0)),
-#                          dtype=float)
-        
-#        interleave_a = numpy.empty((2048,), dtype=float)
-
-#        for i in range(1024):
-#        interleave_a.append(a_0[i])
-#        interleave_a.append(a_1[i])
-#        interleave_a[0::2] = a_0
-#        interleave_a[1::2] = a_1
-
-#        print "Got data in %s secs" % (time.time() - t1)        
-#        return acc_n, interleave_a
 
     def get_data_task(self):
 
