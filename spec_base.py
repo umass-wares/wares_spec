@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 
-import corr,time,struct,sys,logging,pylab,matplotlib
+import corr, logging, struct
 import numpy as np
-import numpy
 import time
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import matplotlib.animation as animation
 import sys
 from scheduler import Task, Scheduler
+import math
 from adc5g_cal import ADC5g_Calibration_Tools
 
 test_bof = 'adc5g_tim_aleks_test_2015_Oct_14_1208.bof.gz'
@@ -288,7 +288,7 @@ class FPGA(object):
             fpga.stop()
             print "Stopping scheduler"
             self.sched.StopAllTasks()
-            numpy.savetxt('data.txt', self.data/float(self.accum_count))
+            np.savetxt('data.txt', self.data/float(self.accum_count))
         
     def integrate(self, init_delay, dumptime, integtime):
         """
@@ -344,7 +344,7 @@ class FPGA(object):
         # Done with integ
         fpga.stop()
         print "Stopping"
-        numpy.savetxt('data.txt', self.data/float(self.accum_count))
+        np.savetxt('data.txt', self.data/float(self.accum_count))
     
     def integrate_single_accum(self, init_delay, dumptime, integtime): 
 
@@ -382,7 +382,7 @@ class FPGA(object):
 
         fpga.stop()
         print "Stopping"
-        numpy.savetxt('data.txt', self.data/float(self.accum_count))
+        np.savetxt('data.txt', self.data/float(self.accum_count))
 
 
     def integrate_for_allan(self, chan, integtime):
@@ -410,7 +410,7 @@ class FPGA(object):
     def map_dump(self, dumptime, maptime, chans=[0, 1, 2, 3]):
         t0 = time.time()
         ndmp = int(maptime/dumptime)
-        mapdata = numpy.zeros((len(chans), self.numchannels, ndmp),
+        mapdata = np.zeros((len(chans), self.numchannels, ndmp),
                               dtype='float')
         for i in range(ndmp):
             self.reset()
@@ -421,6 +421,62 @@ class FPGA(object):
             print "Took %s seconds to read out %d pixels" % (time.time() - t1, len(chans))
         print "Finished Map in %s seconds" % (time.time() - t0)
         return mapdata
+        
+        
+    def do_sfdr_sinad(self, power, tone):
+	    """
+	    Calculates the sinad and sfdr of the raw data. It first gets the PSD.
+	    Then, finds the fundamental peak and the maximum spurious peak. 
+	    (Harmonics are also spurs). The DC level is excluded.
+	    """
+
+	    freqs = self.freq
+	    db = 10*np.log10(power)
+	    tot_pwr = 0.0
+	    in_peak = False
+	    spur_pwr = 0.0
+	    peak_freq = 0.0
+	    pwr_in_peak = 0.0
+	    peak_db = 0.0
+	    sig_pwr=0.0
+     
+	    for i in range(4,len(freqs)):
+		    if abs(freqs[i] - tone) < 4:
+			    test = -70
+		    else:
+			    test = -90
+		    pwr = 10**(float(db[i])/10.)
+		    tot_pwr += pwr
+
+		    if in_peak:
+			    if db[i] < test:
+				    in_peak = False
+				    if abs(peak_freq - tone) < 1:
+					    sig_pwr = pwr_in_peak
+				    else:
+					    if pwr_in_peak > spur_pwr:
+						    spur_pwr = pwr_in_peak	
+			    else:
+				    pwr_in_peak += pwr
+				    if db[i] > peak_db:
+					    peak_db = db[i]
+					    peak_freq = freqs[i]
+		    elif db[i] > test:
+			    pwr_in_peak = pwr
+			    peak_freq = freqs[i]
+			    peak_db = db[i]
+			    in_peak = True
+
+	    try:
+    	        sfdr = 10.0*math.log10(sig_pwr / spur_pwr)
+    	        sinad = 10.0*math.log10(sig_pwr/(tot_pwr - sig_pwr))
+	    except:
+    	        sfdr=0
+    	        sinad=0         
+    	        print ("Math error at freq %f Mhz." %tone)
+    	        print ("sig_pwr=%f, spur_pwr= %f, tot_pwr=%f" %(sig_pwr, spur_pwr, tot_pwr))
+	    return sfdr, sinad
+    
     
     
 class Integration(object):
@@ -436,7 +492,7 @@ class Integration(object):
         integ.acc_n = acc_n
         integ.total_acc_n += integ.acc_n
         print "acc_n = %d, intnum=%d, total = %d" % (integ.acc_n, integ.intnum, integ.total_acc_n)
-        line.set_ydata(numpy.array(data))
+        line.set_ydata(np.array(data))
         ax.set_title("Integration number= %d, acc_n = %d" % (integ.intnum, integ.acc_n))
         plt.draw()
         return line,
