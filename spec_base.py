@@ -14,8 +14,13 @@ from adc5g_cal import ADC5g_Calibration_Tools
 test_bof = 'adc5g_tim_aleks_test_2015_Oct_14_1208.bof.gz'
 
 # 800 MHz
-bof_q = 'rspec_1600mhz_r112_asiaa_adc_4_2015_Dec_10_1410.bof.gz'
-bof_uq = 'rspec_1600mhz_r112_asiaa_adc_5_2016_Feb_05_1528.bof.gz'
+bof_q_800 = 'rspec_1600mhz_r112_asiaa_adc_6_sb1_2016_Jul_14_1242.bof.gz'
+bof_uq_800 = 'rspec_1600mhz_r112_asiaa_adc_5_2016_Feb_05_1528.bof.gz'
+
+# 400 MHz
+bof_q_400 = 'rspec_800mhz_r112_asiaa_adc_6_2016_May_16_1549.bof.gz'
+
+# 200 MHz 
 
 
 katcp_port = 7147
@@ -25,7 +30,7 @@ intnum = 1
 class FPGA(object):
 
     def __init__(self, roach_id, katcp_port=7147,
-                 bitstream = bof_q,
+                 bitstream = bof_q_800,
                  cal_bitstream = test_bof,
                  skip = False,
                  quant = True,
@@ -175,6 +180,46 @@ class FPGA(object):
                                      dtype='float')
 
         return bram_array
+
+
+    def read_2bram(self, chan, bramNo):
+
+        bram_array = np.array(struct.unpack('>%dl' %(self.numchannels/2.),
+                                     self.fpga.read('bram%i%i' %(chan, bramNo),
+                                     self.bram_size*(self.numchannels/2.), 0)),
+                                     dtype='float')
+
+        return bram_array
+
+
+    def get_data_2bram(self, chan, read_acc_n=False):
+
+        t1 = time.time()
+
+        if read_acc_n:
+            acc_n = self.get_acc_n()
+
+        a_0 = self.read_2bram(chan, 0)
+        a_1 = self.read_2bram(chan, 1)
+        
+        
+
+        interleave_a = np.empty((self.numchannels,), dtype=float)
+
+        interleave_a[0::2] = a_0
+        interleave_a[1::2] = a_1        
+
+        read_time = time.time() - t1
+
+
+        if read_acc_n:
+            print "acc_n = %d; Got data in %s secs" % (acc_n, read_time)
+            return acc_n, interleave_a, read_time
+
+        else:
+            print "Got data in %s secs" % (read_time)
+            return interleave_a, read_time
+
     
     def get_data(self, chan, read_acc_n=False):
 
@@ -349,7 +394,7 @@ class FPGA(object):
         self.reset()
         start_time = time.time()
         time.sleep(integtime)
-        acc_n, data, read_time = self.get_data(chan)
+        data, read_time = self.get_data_2bram(chan)
         return data, start_time, read_time #/float(acc_n)
         
     def integrate_all(self, integtime):
