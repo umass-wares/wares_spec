@@ -4,14 +4,16 @@ from matplotlib import pyplot as plt
 
 Nout = 4000
 maxk = Nout/4
-sampleint = 0.5
+sampleint = 1.0
 
-lochan = 1
-hichan = 2048 
+lochan = 1300
+hichan = 1500 
 
 BW = 800.e6/(2048.)
 
-data = np.load('allan_20db_q.npz')['arr_0']
+data = np.load('allan_800mhz_nocal_really.npz')['spec_matrix']
+#start_t = np.load('allan_800mhz_nocal_really.npz')['times']
+#read_t = np.load('a;l')['read_t']
 
 alanvar = []
 
@@ -50,15 +52,15 @@ for k in range(1,maxk+1):
 alanvar = np.array(alanvar)
 time = sampleint+np.arange(maxk)*sampleint
 
-theory = 1./(np.sqrt(BW)*np.sqrt(time))
+theory = np.sqrt(2.)/(np.sqrt(BW)*np.sqrt(time))
 #theory = 1./np.sqrt(time)
 
 #plt.plot(time, alanvar, marker='o')
 #plt.plot(time, theory)
 plt.plot(time, alanvar/theory)
 plt.xscale('log')
-plt.yscale('log')
+#plt.ylim(1.0, 3.0)
 plt.xlabel('Integration Time')
 plt.ylabel('$\sigma_{Allan}$ / $\sigma_{Theory}$')
-plt.title('Allan Plot 800 MHz Spectrometer')
+plt.title('Allan Plot, 800 MHz Spectrometer, 1s Int, Chans 1300-1500, Uncalibrated')
 plt.show()
