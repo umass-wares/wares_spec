@@ -21,10 +21,9 @@ bof_uq_800 = 'rspec_1600mhz_r112_asiaa_adc_5_2016_Feb_05_1528.bof.gz'
 bof_q_400 = 'rspec_800mhz_r112_asiaa_adc_6_2016_May_16_1549.bof.gz'
 
 # 200 MHz 
-
+# bof_q_200
 
 katcp_port = 7147
-
 intnum = 1
 
 class Spec(object):
@@ -32,7 +31,7 @@ class Spec(object):
     def __init__(self, roach_id, katcp_port=7147,
                  bitstream = bof_q_800,
                  cal_bitstream = test_bof,
-                 cal = True,
+                 init_cal = True,
                  skip = False,
                  quant = True,
                  acc_len = int(0.2*(2**28)/2048),
@@ -42,7 +41,7 @@ class Spec(object):
                  bandwidth = 800.0 
                  ):
 
-        self.roach = roach_id
+        self.roach_id = roach_id
         self.fpga = None
         self.katcp_port = katcp_port
         self.bitstream = bitstream
@@ -58,8 +57,10 @@ class Spec(object):
         self.freq = np.arange(self.numchannels)\
             *float(self.bandwidth)/self.numchannels
         self.set_logging()
+
         self.connect()
-        self.program(cal)
+        self.adc_cal_tools = ADC5g_Calibration_Tools(program=False)
+        self.program(init_cal)
         self.configure()
 
         if self.quant:
@@ -68,30 +69,35 @@ class Spec(object):
         else:
             self.bram_size = 8 #bytes
             #self.format = '>%dq' %(self.bram_vec_len)
+
+        if self.bandwidth == 200.0:
+            self.nbram = 2
+        else:
+            self.nbram = 4
         
     def set_logging(self):
 
         self.lh = corr.log_handlers.DebugLogHandler()
-        self.logger = logging.getLogger(self.roach)
+        self.logger = logging.getLogger(self.roach_id)
         self.logger.addHandler(self.lh)
         self.logger.setLevel(10)
 
     def connect(self):
 
-        print('Connecting to server %s on port %i... ' % (self.roach, 
+        print('Connecting to server %s on port %i... ' % (self.roach_id, 
                                                           self.katcp_port)),
 
-        self.fpga = corr.katcp_wrapper.FpgaClient(self.roach, self.katcp_port,
+        self.fpga = corr.katcp_wrapper.FpgaClient(self.roach_id, self.katcp_port,
                                                   timeout=10,
                                                   logger=self.logger)
         time.sleep(1)
         if self.fpga.is_connected():
             print 'ok\n'
         else: 
-            print 'ERROR connecting to server %s on port %i.\n' % (self.roach, self.katcp_port)
+            print 'ERROR connecting to server %s on port %i.\n' % (self.roach_id, self.katcp_port)
             self.exit_fail()
 
-    def program(self, cal=False):
+    def program(self, cal):
 
         if cal:
             self.adc_cal()
@@ -108,9 +114,8 @@ class Spec(object):
 
         print '------------------------'
         print 'Loading default OGP/INL corrections to ADCs'
-        adc_cal = ADC5g_Calibration_Tools()
-        adc_cal.update_ogp()
-        adc_cal.update_inl()
+        self.adc_cal_tools.update_ogp()
+        self.adc_cal_tools.update_inl()
 
     def configure(self):
         
@@ -139,20 +144,24 @@ class Spec(object):
         time.sleep(0.05)
         
     def reset(self):
+
         print 'Resetting counters...',
         self.fpga.write_int('cnt_rst',1) 
         self.fpga.write_int('cnt_rst',0) 
         print 'done'
 
     def stop(self):
+
         print 'Stopping accumulation...',
         self.fpga.write_int('cnt_rst',1)
 
     def go(self):
+
         print 'Starting accumulation...',
         self.fpga.write_int('cnt_rst',0)
         
     def exit_fail(self):
+
         print 'FAILURE DETECTED. Log entries:\n', self.lh.printMessages()
         try:
             self.fpga.stop()
@@ -161,94 +170,52 @@ class Spec(object):
         sys.exit()
 
     def exit_clean(self):
+
         try:
             self.fpga.stop()
         except: pass
         sys.exit()
 
     def get_acc_n(self):
+
         self.acc_n = self.fpga.read_uint('acc_cnt')
         return self.acc_n
 
     def get_sync_cnt(self):
+
         self.acc_n = self.fpga.read_uint('sync_cnt')
         return self.acc_n    
 
+
     def read_bram(self, chan, bramNo):
-
-        bram_array = np.array(struct.unpack('>%dl' %(self.numchannels/4.), 
+        
+        bram_array = np.array(struct.unpack('>%dl' %(self.numchannels/self.nbram), 
                                      self.fpga.read('bram%i%i' %(chan, bramNo),
-                                     self.bram_size*(self.numchannels/4), 0)),
+                                     self.bram_size*(self.numchannels/self.nbram), 0)),
                                      dtype='float')
 
         return bram_array
-
-
-    def read_2bram(self, chan, bramNo):
-
-        bram_array = np.array(struct.unpack('>%dl' %(self.numchannels/2.),
-                                     self.fpga.read('bram%i%i' %(chan, bramNo),
-                                     self.bram_size*(self.numchannels/2.), 0)),
-                                     dtype='float')
-
-        return bram_array
-
-
-    def get_data_2bram(self, chan, read_acc_n=False):
-
-        t1 = time.time()
-
-        if read_acc_n:
-            acc_n = self.get_acc_n()
-
-        a_0 = self.read_2bram(chan, 0)
-        a_1 = self.read_2bram(chan, 1)
-        
-        
-
-        interleave_a = np.empty((self.numchannels,), dtype=float)
-
-        interleave_a[0::2] = a_0
-        interleave_a[1::2] = a_1        
-
-        read_time = time.time() - t1
-
-
-        if read_acc_n:
-            print "acc_n = %d; Got data in %s secs" % (acc_n, read_time)
-            return acc_n, interleave_a, read_time
-
-        else:
-            print "Got data in %s secs" % (read_time)
-            return interleave_a, read_time
 
     
+
     def get_data(self, chan, read_acc_n=False):
+
+        """
+           For quantized 32-bit vacc bram (unquantized 64-bit vacc needs '>%dq')                                         
+           Retrieves data from channel 'chan'                                                                            
+           Interleaves bram blocks into full spectrum 
+        """
 
         t1 = time.time()
 
         if read_acc_n:
             acc_n = self.get_acc_n()
         
-        #
-        # GET DATA
-        #
-        # For quantized 32-bit vacc bram (unquantized 64-bit vacc needs '>%dq')
-        # Retrieves data from channel 'chan'
-        # Interleaves 4 bram blocks into full spectrum
-        #
-
-        a_0 = self.read_bram(chan, 0)
-        a_1 = self.read_bram(chan, 1)
-        a_2 = self.read_bram(chan, 2)
-        a_3 = self.read_bram(chan, 3)
-
         interleave_a = np.empty((self.numchannels,), dtype=float)
-        
-        interleave_a[0::4] = a_0
-        interleave_a[1::4] = a_1
-        interleave_a[2::4] = a_2
-        interleave_a[3::4] = a_3
+
+        for bramNo in range(self.nbram):
+
+            interleave_a[bramNo::self.nbram] = self.read_bram(chan, bramNo)
 
         read_time = time.time() - t1
         
@@ -257,18 +224,28 @@ class Spec(object):
             return acc_n, interleave_a, read_time
 
         else:
+            print "read Channel %i in %s secs" %(chan, read_time)
             return interleave_a, read_time
 
 
     def get_data_all(self):
-
+        
+        """
+           Gets data from all 4 channels
+        """
+        
         t1 = time.time()
         data = {}
+
         for i in range(4):
+
             acc_n, dt = self.get_data(i)
             data[i] = dt
+
         print "Got all data in %s secs" % (time.time() - t1)            
         return data
+
+
 
     def get_data_task(self):
 
@@ -392,6 +369,7 @@ class Spec(object):
         start_time = time.time()
         time.sleep(integtime)
         data, read_time = self.get_data(chan, read_acc_n=False)
+
         return data, start_time, read_time 
         
     def integrate_all(self, integtime):
@@ -508,9 +486,10 @@ if __name__ == '__main__':
     p.set_description(__doc__)
     p.add_option('-q', '--quant', dest='quant', action='store_true',
                  help='Quantized (True) or Unquantized (False) spectrometer bof')
+
     p.add_option('-g', '--gain', dest='gain', type='int',
                  default=0xffff,
-                 help='Set the digital gain (6bit quantisation scalar). Default is 0xffffffff (max), good for wideband noise. Set lower for CW tones.')
+                 help='Set the digital gain (6bit quantisation scalar).Default is 0xffffffff (max), good for wideband noise. Set lower for CW tones.')
 
     p.add_option('-s', '--skip', dest='skip', action='store_true',
                  help='Skip reprogramming the FPGA and configuring EQ.')
