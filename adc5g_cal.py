@@ -48,7 +48,7 @@ def sin_residuals(p, sin, cos, raw):
 
 class ADC5g_Calibration_Tools (object):
     
-    def __init__(self, roach_id = '172.30.51.97', 
+    def __init__(self, program = True, roach_id = '172.30.51.97', 
 		 bitstream = 'adc5g_tim_aleks_test_2015_Oct_14_1208.bof.gz',
 		 clk=1600):
 
@@ -58,11 +58,15 @@ class ADC5g_Calibration_Tools (object):
 	    self.freqs_cores = np.linspace(100,clk/4,6,endpoint=False)
 	    self.freqs_bw = np.arange(50,clk/2,25)
 	    self.syn = HP8780A()
-
+	    
 	    roach = katcp_wrapper.FpgaClient(roach_id)
 	    roach.wait_connected()
-	    roach.progdev(self.bitstream)
 	    self.roach = roach
+
+	    if program:
+
+		    self.roach.progdev(self.bitstream)
+
 
     def get_channel_snap_reg(self, chan):
 
