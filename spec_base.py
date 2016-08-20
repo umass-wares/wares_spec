@@ -27,11 +27,12 @@ katcp_port = 7147
 
 intnum = 1
 
-class FPGA(object):
+class Spec(object):
 
     def __init__(self, roach_id, katcp_port=7147,
                  bitstream = bof_q_800,
                  cal_bitstream = test_bof,
+                 cal = True,
                  skip = False,
                  quant = True,
                  acc_len = int(0.2*(2**28)/2048),
@@ -58,17 +59,18 @@ class FPGA(object):
             *float(self.bandwidth)/self.numchannels
         self.set_logging()
         self.connect()
-        self.program(cal=True)
+        self.program(cal)
         self.configure()
 
         if self.quant:
             self.bram_size = 4 #bytes
-            self.format = '>%dl'
+            #self.format = '>%dl' %(self.bram_vec_len)
         else:
             self.bram_size = 8 #bytes
-            self.format = '>%dq'
+            #self.format = '>%dq' %(self.bram_vec_len)
         
     def set_logging(self):
+
         self.lh = corr.log_handlers.DebugLogHandler()
         self.logger = logging.getLogger(self.roach)
         self.logger.addHandler(self.lh)
@@ -249,10 +251,9 @@ class FPGA(object):
         interleave_a[3::4] = a_3
 
         read_time = time.time() - t1
-
-        print "acc_n = %d; Got data in %s secs" % (acc_n, read_time)
         
         if read_acc_n:
+            print "acc_n = %d; Got data in %s secs" % (acc_n, read_time)
             return acc_n, interleave_a, read_time
 
         else:
@@ -387,17 +388,14 @@ class FPGA(object):
 
     def integrate_for_allan(self, chan, integtime):
 
-        #self.data = np.zeros(self.numchannels, dtype='float')
-        #self.accum_count = 0
-        #self.prev_acc_n = 0
-
         self.reset()
         start_time = time.time()
         time.sleep(integtime)
-        data, read_time = self.get_data_2bram(chan)
-        return data, start_time, read_time #/float(acc_n)
+        data, read_time = self.get_data(chan, read_acc_n=False)
+        return data, start_time, read_time 
         
     def integrate_all(self, integtime):
+
         t1 = time.time()
         self.reset()
         time.sleep(integtime)
@@ -408,6 +406,7 @@ class FPGA(object):
         return data
     
     def map_dump(self, dumptime, maptime, chans=[0, 1, 2, 3]):
+
         t0 = time.time()
         ndmp = int(maptime/dumptime)
         mapdata = np.zeros((len(chans), self.numchannels, ndmp),
