@@ -2,7 +2,7 @@ from adc5g_cal import ADC5g_Calibration_Tools
 import numpy as np
 from corr import katcp_wrapper
 
-roach = katcp_wrapper.FpgaClient('172.30.51.97')
+roach = katcp_wrapper.FpgaClient('172.30.51.101')
 roach.wait_connected()
 adc_cal = ADC5g_Calibration_Tools(roach, clk=1600)
 
