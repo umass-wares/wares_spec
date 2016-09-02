@@ -46,9 +46,9 @@ def sin_residuals(p, sin, cos, raw):
 # (in 2-channel mode, A and B sample together, C and D sample together)
 #
 
-class ADC5g_Calibration_Tools (object):
+class ADC5g_Calibration_Tools ():
     
-    def __init__(self, program = True, roach_id = '172.30.51.97', 
+    def __init__(self, roach, program = True, roach_id = '172.30.51.97', 
 		 bitstream = 'adc5g_tim_aleks_test_2015_Oct_14_1208.bof.gz',
 		 clk=1600):
 
@@ -57,17 +57,19 @@ class ADC5g_Calibration_Tools (object):
 	    self.clk = clk
 	    self.freqs_cores = np.linspace(100,clk/4,6,endpoint=False)
 	    self.freqs_bw = np.arange(50,clk/2,25)
-	    self.syn = HP8780A()
-	    
-	    roach = katcp_wrapper.FpgaClient(roach_id)
-	    roach.wait_connected()
+	    self.syn = None
 	    self.roach = roach
 
 	    if program:
+                    self.program()
+                   
 
-		    self.roach.progdev(self.bitstream)
-
-
+    def program(self):
+            
+         print 'Programming ROACH with calibration bitstream:'
+         print '%s' %(self.bitstream)
+         self.roach.progdev(self.bitstream)
+   
     def get_channel_snap_reg(self, chan):
 
          """
@@ -123,11 +125,11 @@ class ADC5g_Calibration_Tools (object):
 	   of frequency 'freq' (MHz)
 	"""
 
-	if freq != None:
+#	if freq != None:
 
-		self.syn.output_on()
-		self.syn.set_freq(freq*1e6)
-		time.sleep(1)
+#		self.syn.output_on()
+#		self.syn.set_freq(freq*1e6)
+#		time.sleep(1)
 
 	reg = self.get_channel_snap_reg(chan)
 	raw = array(adc5g.get_snapshot(self.roach, reg))
@@ -427,7 +429,7 @@ class ADC5g_Calibration_Tools (object):
 
 	    i += 1
 
-        self.roach.progdev(self.bitstream)
+        #self.roach.progdev(self.bitstream)
 
 
     def do_ogp_cw_sweep(self, chans = [0,1,2,3], set_ogp=True, 
@@ -575,7 +577,7 @@ class ADC5g_Calibration_Tools (object):
 		self.set_ogp(ogp_chan = ogp_chan, chan = chan)
 		i += 1
 
-	self.roach.progdev(self.bitstream)
+	#self.roach.progdev(self.bitstream)
 
 
     def clear_ogp(self, chans = [0,1,2,3]):
@@ -596,7 +598,7 @@ class ADC5g_Calibration_Tools (object):
 
 			adc5g.set_spi_phase(self.roach, zdok, core, 0)
 
-        self.roach.progdev(self.bitstream)
+        #self.roach.progdev(self.bitstream)
 
 #
 # INL Functions
@@ -792,7 +794,7 @@ class ADC5g_Calibration_Tools (object):
 		
 		i += 1
 	
-	self.roach.progdev(self.bitstream)
+	#self.roach.progdev(self.bitstream)
         
 
     def do_inl(self, chans, freq, set_inl = False, save = False, 
@@ -848,7 +850,7 @@ class ADC5g_Calibration_Tools (object):
                 self.set_inl(inl_chan = inl_chan, chan = chan)
                 i += 1
 
-        self.roach.progdev(self.bitstream)
+        #self.roach.progdev(self.bitstream)
 		
 
 
@@ -868,7 +870,7 @@ class ADC5g_Calibration_Tools (object):
 
 		      adc5g.set_inl_registers(self.roach, zdok, core, inl0) 
 
-        self.roach.progdev(self.bitstream)
+        #self.roach.progdev(self.bitstream)
 
 #
 # Misc. 

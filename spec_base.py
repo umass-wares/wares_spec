@@ -31,10 +31,9 @@ class Spec(object):
     def __init__(self, roach_id, katcp_port=7147,
                  bitstream = bof_q_800,
                  cal_bitstream = test_bof,
-                 init_cal = True,
                  skip = False,
                  quant = True,
-                 acc_len = int(0.2*(2**28)/2048),
+                 acc_len = int(.2*(2**28)/2048),
                  gain = 0xffff,
                  shift = 0xffff,
                  numchannels = 2048,
@@ -47,21 +46,18 @@ class Spec(object):
         self.bitstream = bitstream
         self.cal_bistream = cal_bitstream
         self.skip = skip
+
         self.quant = quant
         self.acc_len = acc_len
         self.gain = gain
         self.shift = shift
         self.acc_n = 0
+
         self.numchannels = numchannels
         self.bandwidth = bandwidth
         self.freq = np.arange(self.numchannels)\
             *float(self.bandwidth)/self.numchannels
         self.set_logging()
-
-        self.connect()
-        self.adc_cal_tools = ADC5g_Calibration_Tools(program=False)
-        self.program(init_cal)
-        self.configure()
 
         if self.quant:
             self.bram_size = 4 #bytes
@@ -74,6 +70,15 @@ class Spec(object):
             self.nbram = 2
         else:
             self.nbram = 4
+
+        self.connect()
+        self.program()
+
+        self.adc_cal_tools = ADC5g_Calibration_Tools(self.fpga, program=False)
+        self.adc_cal()
+
+        self.configure()
+
         
     def set_logging(self):
 
@@ -97,10 +102,7 @@ class Spec(object):
             print 'ERROR connecting to server %s on port %i.\n' % (self.roach_id, self.katcp_port)
             self.exit_fail()
 
-    def program(self, cal):
-
-        if cal:
-            self.adc_cal()
+    def program(self):
 
         print '------------------------'
         print 'Programming FPGA with %s...' % self.bitstream,
@@ -110,7 +112,7 @@ class Spec(object):
         else:
             print 'Skipped.'
 
-    def adc_cal(self, cal_file = None):
+    def adc_cal(self):
 
         print '------------------------'
         print 'Loading default OGP/INL corrections to ADCs'
@@ -363,15 +365,20 @@ class Spec(object):
         np.savetxt('data.txt', self.data/float(self.accum_count))
 
 
-    def integrate_for_allan(self, chan, integtime):
+    def integrate_for_allan(self, chan, integtime, read_acc_n=False):
 
         self.reset()
         start_time = time.time()
         time.sleep(integtime)
-        data, read_time = self.get_data(chan, read_acc_n=False)
 
-        return data, start_time, read_time 
+        if read_acc_n:
+            acc_n, data, read_time = self.get_data(chan, read_acc_n=read_acc_n)
+            return acc_n, data, start_time, read_time 
         
+        else:
+            data, read_time = self.get_data(chan, read_acc_n=read_acc_n)
+            return data, start_time, read_time 
+
     def integrate_all(self, integtime):
 
         t1 = time.time()

@@ -6,12 +6,12 @@ Nout = 4000
 maxk = Nout/4
 sampleint = 1.0
 
-lochan = 1300
-hichan = 1500 
+lochan = 1500
+hichan = 1700 
 
 BW = 800.e6/(2048.)
 
-data = np.load('allan_800mhz_nocal_really.npz')['spec_matrix']
+data = np.load('allan_spectra_800mhz_4000samps_1int_aug24_1.npz')['spec_matrix']
 #start_t = np.load('allan_800mhz_nocal_really.npz')['times']
 #read_t = np.load('a;l')['read_t']
 
@@ -56,11 +56,13 @@ theory = np.sqrt(2.)/(np.sqrt(BW)*np.sqrt(time))
 #theory = 1./np.sqrt(time)
 
 #plt.plot(time, alanvar, marker='o')
-#plt.plot(time, theory)
-plt.plot(time, alanvar/theory)
+plt.plot(time, alanvar, label='alanvar')
+plt.plot(time, theory, label='theory')
 plt.xscale('log')
+plt.yscale('log')
 #plt.ylim(1.0, 3.0)
 plt.xlabel('Integration Time')
-plt.ylabel('$\sigma_{Allan}$ / $\sigma_{Theory}$')
-plt.title('Allan Plot, 800 MHz Spectrometer, 1s Int, Chans 1300-1500, Uncalibrated')
+plt.ylabel('$\sigma_{Allan}$')
+plt.title('Allan Plot, 800 MHz Spectrometer, 1s Int, Chans 1300-1500, Calibrated')
+plt.legend(loc='best')
 plt.show()
