@@ -1,33 +1,36 @@
-import hp8780a
+#import hp8780a
 import numpy as np
-import os
+#import os
 import time
-from spec_base import FPGA
+from spec_base import Spec, bof_q_800
+from corr import katcp_wrapper
 
-Nout = 4000
-sampleint = 1.0
+Nout = 50
+sampleint = 2.0
 
-syn = hp8780a.HP8780A()
-syn.output_off
+#roach = katcp_wrapper.FpgaClient('172.30.51.97')
+#roach.progdev(bof_q_800)
 
-#noise = 20
+spec = Spec('172.30.51.97', bitstream=bof_q_800, numchannels=2048, bandwidth=800.0)
 
-fpga = FPGA('172.30.51.97', 
-	    bitstream='rspec_1600mhz_r112_asiaa_adc_6_sb1_2016_Jul_14_1242.bof.gz',
-	    cal=False, gain=0xffff, numchannels=2048, bandwidth=800)
+spec.fpga.wait_connected()
 
 spec_matrix = np.zeros((Nout,2048))
 start_t = np.zeros(Nout)
 read_t = np.zeros(Nout)
 
+
 for i in range(0, Nout):
 
-	spec_matrix[i], start_t[i], read_t[i] =\
-	         fpga.integrate_for_allan(0, sampleint)
+	spec_matrix[i], start_t[i], read_t[i]= spec.integrate_for_allan(chan=0, integtime=sampleint, read_acc_n=False)
+
+        #np.savetxt('allan_spectra_800mhz_4000samps_1int_aug24_1_samp%i.txt' %(i+1), spec_matrix[i])  
 
 	print 'Done with integ # %i' %(i+1)
 
-np.savez('allan_800mhz_nocal_really', spec_matrix = spec_matrix, start_t = start_t, read_t = read_t)
+
+np.savez('allan_spectra_800mhz_4000samps_1int_aug24_1', 
+         spec_matrix = spec_matrix, start_t = start_t, read_t = read_t)
  
 
 

@@ -151,7 +151,6 @@ def seq_data_record(ndumps, nchan, nhorn, bof_file, obs_length = 20.0):
 
     newfile.close()
 
-
 	
 # MAIN
 configure()
