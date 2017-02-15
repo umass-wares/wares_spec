@@ -16,8 +16,8 @@ adc_cal_tools = ADC5g_Calibration_Tools(roach, program=False)
 nbram = 2
 numchannels = 2048 
 gain = 0xffff
-sync_time = 167772160/(roach.est_brd_clk()*1e6)
-acc_len= (sync_time)*(200e6)/(1024)
+sync_time = 167772160/(200.*1e6)
+acc_len= (sync_time)*(200.*1e6)/(1024)
 
 def configure():
         

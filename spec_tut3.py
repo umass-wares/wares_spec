@@ -7,9 +7,10 @@ import numpy as numpy
 #from netCDF4 import Dataset, Variable
 from adc5g_cal import ADC5g_Calibration_Tools
 
-roach = katcp_wrapper.FpgaClient('172.30.51.97')
+roach = katcp_wrapper.FpgaClient('172.30.51.101')
 roach.wait_connected()
-roach.progdev('tut3_adc5g_2016_Oct_13_1431.bof.gz')
+#roach.progdev('tut3_adc5g_2016_Oct_13_1431.bof.gz')
+roach.progdev('adc5g_800mhz_snap_quant_2017_Feb_14_2309.bof.gz')
 
 adc_cal_tools = ADC5g_Calibration_Tools(roach, program=False)
 
