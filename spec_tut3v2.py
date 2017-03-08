@@ -11,14 +11,17 @@ import adc5g
 roach = katcp_wrapper.FpgaClient('172.30.51.101')
 roach.wait_connected()
 #roach.progdev('tut3_adc5g_2016_Oct_13_1431.bof.gz')
-roach.progdev('adc5g_800mhz_quant_blocks_2017_Feb_16_2352.bof.gz')
+roach.progdev('adc5g_800mhz_quant_blocks_2017_Mar_07_1037.bof.gz')
 
 adc_cal_tools = ADC5g_Calibration_Tools(roach, program=False)
 
 nbram = 4
 numchannels = 2048 
 gain = 0xffffff
-sync_time = 167772160/(roach.est_brd_clk()*1e6)
+shift = 0xfff
+#sync_period = 167772160
+sync_period = 368640
+sync_time = sync_period/(roach.est_brd_clk()*1e6)
 acc_len= (sync_time)*(200e6)/(1024)
 
 def configure():
@@ -30,9 +33,13 @@ def configure():
         #time.sleep(0.5)
         print 'Setting digital gain of all channels to %i...' %gain,
         roach.write_int('gain', gain)
+	print 'done'
 	
-	sync_time = 167772160/(roach.est_brd_clk()*1e6)
-	
+	print ' Setting fft shift schedule to %i...' %shift,
+	roach.write_int('fftshift', shift)
+	print 'done'
+
+	sync_time = sync_period/(roach.est_brd_clk()*1e6)	
 	reset()
         time.sleep(0.05)
         
