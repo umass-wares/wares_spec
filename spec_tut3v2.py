@@ -11,7 +11,7 @@ import adc5g
 roach = katcp_wrapper.FpgaClient('172.30.51.101')
 roach.wait_connected()
 #roach.progdev('tut3_adc5g_2016_Oct_13_1431.bof.gz')
-roach.progdev('adc5g_800mhz_quant_blocks_2017_Mar_07_1037.bof.gz')
+roach.progdev('adc5g_800mhz_quant_blocks_2017_Mar_08_1259.bof.gz')
 
 adc_cal_tools = ADC5g_Calibration_Tools(roach, program=False)
 
@@ -20,9 +20,9 @@ numchannels = 2048
 gain = 0xffffff
 shift = 0xfff
 #sync_period = 167772160
-sync_period = 368640
-sync_time = sync_period/(roach.est_brd_clk()*1e6)
-acc_len= (sync_time)*(200e6)/(1024)
+sync_period = 37748736
+sync_time = sync_period/(200*1e6)
+acc_len= (sync_time)*(200e6)/(numchannels/nbram)
 
 def configure():
         
