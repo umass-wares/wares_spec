@@ -39,6 +39,9 @@ def configure():
 	roach.write_int('fftshift', shift)
 	print 'done'
 
+	print ' Setting sync constant to %i...' %sync_period,
+	roach.write_int('sync_constant', sync_period)
+	print 'done'
 	sync_time = sync_period/(roach.est_brd_clk()*1e6)	
 	reset()
         time.sleep(0.05)
