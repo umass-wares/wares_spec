@@ -6,8 +6,7 @@ import time
 import datetime
 import numpy as np
 from numpy import array, mean
-from scipy.optimize import leastsq
-from scipy.optimize import curve_fit
+from scipy.optimize import leastsq, curve_fit, fmin
 import math
 from matplotlib import pyplot as plt
 from matplotlib import mlab
@@ -30,6 +29,14 @@ def sin_residuals(p, sin, cos, raw):
                 res[i] = 0
         return res
 
+def gaussian(x,a,mu,sig): return a*np.exp(-(x-mu)**2 / (2. * sig**2))
+
+def chisq(par, x, y, yerr):
+    (a, mu, sig) = par
+    return np.sum((gaussian(x,a,mu,sig)-y)**2/yerr**2)
+
+
+
 #
 # ADC5g Calibration Tools
 #
@@ -48,7 +55,7 @@ def sin_residuals(p, sin, cos, raw):
 
 class ADC5g_Calibration_Tools ():
     
-    def __init__(self, roach, program = True, roach_id = '172.30.51.97', 
+    def __init__(self, roach, program = False, roach_id = '172.30.51.97', 
 		 bitstream = 'adc5g_tim_aleks_test_2015_Oct_14_1208.bof.gz',
 		 clk=1600):
 
@@ -79,16 +86,16 @@ class ADC5g_Calibration_Tools ():
 	 reg = None
 
 	 if chan == 0:
-		 reg = 'scope_raw_a0_snap'
+		 reg = 'snap0'
 
 	 if chan == 1:
-		 reg = 'scope_raw_c0_snap'
+		 reg = 'snap1'
 
 	 if chan == 2:
-		 reg = 'scope_raw_a1_snap'
+		 reg = 'snap2'
 	    
 	 if chan == 3:
-		 reg = 'scope_raw_c1_snap'
+		 reg = 'snap3'
 
 	 return reg
      
@@ -381,7 +388,7 @@ class ADC5g_Calibration_Tools ():
 
         return ogp_chan
 
-    def get_ogp(self, chans=[0,1]):
+    def get_ogp(self, chans=[0,1,2,3]):
 
         """
 	   Get OGP for all channels in 'chans'
@@ -523,7 +530,95 @@ class ADC5g_Calibration_Tools ():
                 np.savez(fname, multi_ogp = multi_ogp, chans = chans)
 
         return multi_ogp, chans
-	
+
+
+
+    def repeat_snaps(self, rpt=10):
+
+	    counts = np.zeros((2,4,256))
+
+	    for r in range(rpt):
+
+		    for chan in [0,1,2,3]:
+
+			    zdok,cores = self.get_channel_core_spi(chan)
+			    raw,f = self.get_snap(chan, freq=None)
+ 
+			    bc0 = np.bincount((raw[0::2]+128))
+			    bc1 = np.bincount((raw[1::2]+128))
+			    
+			    counts[zdok, cores[0]-1, :len(bc0)] += bc0
+			    counts[zdok, cores[1]-1, :len(bc1)] += bc1
+
+	    return counts
+
+    def og(self):
+	    
+	    counts = self.repeat_snaps(100)
+
+	    #corder = [1, 3, 2, 4]
+	    x = np.arange(-128, 128, 1) # integer values assigned to bins                                                            
+	    xx = np.linspace(-128, 128, 200)
+
+	    gr = 75
+	    doplot = True
+	    setog = True
+
+	    for i in [0,1]:
+		    means = np.zeros(4)
+		    stds = np.zeros(4)
+		    for j in [0,1,2,3]:
+			    y = counts[i,j]
+			    yerr = np.sqrt(1+y+.10*y**2) # 10% systematic error                                                              
+			    p0=(np.max(y), 0., 30.)
+			    # do fit and ignore first and last bins (saturation)                                                             
+			    ret = fmin(chisq, (np.max(y), 0, 40), args=(x[gr:-gr], y[gr:-gr], yerr[gr:-gr]), disp=False)
+        
+			    if doplot:
+				    plt.subplot(4,2,1+4*i+j)
+				    iflabel = 'IF%d core %d' % (i,j)
+				    statslabel = r'$\mu$:%.1f, $\sigma$:%.1f' % (ret[1], ret[2])
+				    # h0 = plt.errorbar(x, y, yerr, fmt='.', label='IF%d core %d' % (i,j))                                       
+				    h0 = plt.plot(x, y, '.', label='zdok%d core %d' % (i,j))
+				    h1 = plt.plot(xx, gaussian(xx, *ret), label=r'$\mu$:%.1f, $\sigma$:%.1f' % (ret[1], ret[2]))
+				    plt.text(0.05, 0.95, iflabel, ha='left', va='top', transform=plt.gca().transAxes)
+				    plt.text(0.95, 0.95, statslabel, ha='right', va='top', transform=plt.gca().transAxes)
+				    plt.xlim(-128, 128)
+				    plt.ylim(0, 1.05 * np.max(counts))
+				    plt.yticks([])
+				    plt.xticks([])
+
+			    means[j] = ret[1]
+			    stds[j] = ret[2]
+			    print "IF%d Core %d: mean %5.2f std %5.2f" % (i, j, ret[1], ret[2])
+		    avg_std = np.mean(stds) # target std
+                                                                                 
+		    for j in [0,1,2,3]:
+			    #orig_off = adc5g.get_spi_offset(self.roach, i, j+1)
+			    #orig_gain = adc5g.get_spi_gain(self.roach, i, j+1)
+			    #new_off = orig_off - means[j] * 500./256.
+			    new_off = - means[j]*500./256.
+			    #new_gain = (100. + orig_gain) * (avg_std / stds[j]) - 100.
+			    new_gain = 100.*(avg_std/stds[j])-100.
+			    print
+			    print new_off
+			    print new_gain
+			    print
+
+			    if setog:
+				    adc5g.set_spi_offset(self.roach, i, j+1, new_off)
+				    adc5g.set_spi_gain(self.roach, i, j+1, new_gain)
+			    #sol[i,j,0] = new_off
+			    #sol[i,j,1] = new_gain
+
+	    #if doplot:
+	    #	    plt.suptitle('%s ADC 8bit population\n%s' % (open('/etc/hostname').read().strip(), tag))
+	    #	    plt.subplots_adjust(hspace=0, wspace=0)
+	    #	    plt.setp(plt.gcf(), figwidth=8, figheight=12)
+		    #figfile = 'ogplot-%s.png' % tag
+		    #print "saving figure to: %s" % figfile
+		    #plt.savefig(figfile)
+
 
     def calc_ogp_noise(self, raw):
 
@@ -886,10 +981,7 @@ class ADC5g_Calibration_Tools ():
 
     def levels_hist(self, raw):
 
-        raw = np.array(adc5g.get_snapshot(self.roach, 'scope_raw_a0_snap'),
-		       np.int32)
-
-	bins = np.arange(-128.5, 128.5, 1)
+       	bins = np.arange(-128.5, 128.5, 1)
 	
 	th = 32
 	lim1 = -th-0.5
