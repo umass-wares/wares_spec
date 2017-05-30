@@ -4,11 +4,11 @@ import adc5g
 from pylab import plot,xlabel,ylabel
 from adc5g_cal import ADC5g_Calibration_Tools
 from corr import katcp_wrapper
-from spectrometer_modes import mode_800, mode_400
+from spectrometer_modes import mode_800, mode_400, mode_200
 
 class Spectrometer(object):
 
-    def __init__(self, roach_id='172.30.51.101', katcp_port=7147, mode='800', scale=1024):
+    def __init__(self, roach_id='172.30.51.101', katcp_port=7147, mode=800, scale=1024):
 
         self.roach_id = roach_id
         self.katcp_port = katcp_port 
@@ -28,6 +28,9 @@ class Spectrometer(object):
 
         if (mode==400):
             self.mode = mode_400()
+
+        if (mode==200):
+            self.mode = mode_200()
 
         self.adc_cal_tools = ADC5g_Calibration_Tools(self.roach, program=False)
 
@@ -149,3 +152,12 @@ class Spectrometer(object):
                 self.adc_cal_tools.levels_hist(raw)
 
         return raw
+
+#    def snap_bad(self, hist=True):
+
+#        raw = adc5g.get_snapshot(self.roach, 'snap')
+
+#        if hist:
+#            self.adc_cal_tools.levels_hist(raw)
+        
+#        return raw
